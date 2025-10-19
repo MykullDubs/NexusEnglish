@@ -1,55 +1,434 @@
-<div id="dashboard-container">
-    
-    <section id="core-info-grid">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Hub: Student Console | Nexus English</title>
+    <style>
+        /*
+         * Nexus Hub: General ESL Student Dashboard Styles
+         * Aesthetic: Web 4.0 / Futuristic Control Console
+         */
+
+        /* --- 1. CORE WEB 4.0 AESTHETIC & RESET --- */
+        :root {
+            --color-primary: #1E3A8A; /* Deep Space Blue */
+            --color-secondary: #06B6D4; /* Cyan/Holo Accent */
+            --color-text-light: #F0F9FF; /* Crisp White */
+            --color-text-dark: #1E293B;
+            --color-panel-bg: rgba(2, 6, 23, 0.9);
+            --color-success: #10B981; /* Green for success */
+            --color-warning: #F59E0B; /* Yellow for caution (for streaks/due dates) */
+            --color-danger: #EF4444; /* Red for high priority/logout */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: var(--color-text-dark);
+            color: var(--color-text-light);
+            line-height: 1.6;
+            min-height: 100vh;
+            /* Radial gradient for space depth */
+            background-image: radial-gradient(circle at 50% 150%, var(--color-primary) 0%, transparent 85%); 
+            background-attachment: fixed;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* --- 2. HEADER BAR & UTILITY --- */
+        #header-bar {
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--color-secondary);
+        }
+
+        #header-bar h1 {
+            font-size: 1.2em;
+            color: var(--color-text-light);
+            margin: 0;
+            letter-spacing: 2px;
+        }
+
+        .logout-btn {
+            background-color: var(--color-danger);
+            color: var(--color-text-light);
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* --- 3. BASE PANEL STYLING & GRID --- */
+        #main-grid {
+            display: grid;
+            grid-template-columns: 1fr; /* Stacked on Mobile */
+            gap: 20px;
+        }
+
+        @media (min-width: 1024px) {
+            #main-grid {
+                grid-template-columns: 2fr 1fr; /* 2/3 Content, 1/3 Sidebar */
+            }
+        }
+
+        #content-panels {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 20px;
+        }
+
+        .dashboard-panel {
+            background-color: var(--color-panel-bg);
+            padding: 25px;
+            border-radius: 8px;
+            border: 1px solid var(--color-primary);
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+            min-height: 220px; /* Ensures visual alignment */
+        }
+
+        .dashboard-panel h2 {
+            color: var(--color-secondary);
+            border-bottom: 1px dashed var(--color-primary);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        button {
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        /* --- 4. WIDGET-SPECIFIC STYLES --- */
+
+        /* --- Stats/Class Selection Widget --- */
+        #stats-summary {
+            grid-column: 1 / -1; 
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-around;
+        }
+
+        .stat-card {
+            flex: 1 1 200px;
+            padding: 15px;
+            background-color: rgba(30, 58, 138, 0.5);
+            border-radius: 5px;
+            text-align: center;
+            border-left: 3px solid var(--color-secondary);
+        }
+        .stat-card .score {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--color-success);
+            margin: 5px 0;
+        }
+        .stat-card label {
+            font-size: 0.9em;
+            color: var(--color-secondary);
+        }
+
+        .class-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            background-color: rgba(6, 182, 212, 0.15); 
+            border-left: 3px solid var(--color-warning); 
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .class-item .due-date {
+            font-size: 0.9em;
+            color: var(--color-warning);
+        }
+
+        .cta-button-mini {
+            background-color: var(--color-success);
+            color: var(--color-text-dark);
+            padding: 8px 15px;
+            font-size: 0.9em;
+            margin-top: 15px;
+            width: 100%;
+        }
+
+        /* --- Study Tools Widget --- */
+        #streak-tracker {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1em;
+            padding: 10px 0;
+            margin-bottom: 15px;
+            border-bottom: 1px dotted var(--color-primary);
+        }
+
+        #streak-tracker i { /* Placeholder for a fire/flame icon */
+            color: var(--color-warning);
+            font-size: 1.3em;
+        }
+
+        #tool-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tool-link-item {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: rgba(30, 58, 138, 0.6);
+            color: var(--color-text-light);
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+            border: 1px solid var(--color-primary);
+        }
+
+        /* --- Content Library Widget --- */
+        #library-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .library-link-item {
+            display: block;
+            background-color: rgba(30, 58, 138, 0.6);
+            color: var(--color-text-light);
+            padding: 15px;
+            text-decoration: none;
+            border-radius: 5px;
+            border-left: 3px solid var(--color-secondary);
+            text-align: left;
+            transition: background-color 0.2s;
+        }
+
+        /* --- 5. SIDEBAR / STATUS BAR --- */
+        #sidebar-panel {
+            min-height: 500px;
+        }
+
+        #character-status {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 25px;
+            border-bottom: 1px dashed var(--color-primary);
+        }
+        .avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px solid var(--color-secondary);
+            margin-bottom: 10px;
+        }
+        .avatar-label {
+            color: var(--color-secondary);
+        }
+
+        .mission-status-label {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: var(--color-success);
+            transition: width 0.5s;
+        }
+
+        #launch-next-module-btn {
+            width: 100%;
+            background-color: var(--color-success);
+            color: var(--color-text-dark);
+            border: none;
+            font-size: 1.1em;
+            padding: 12px 20px;
+            margin-top: 25px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header-bar">
+        <h1>NEXUS ENGLISH HUB</h1>
+        <button class="logout-btn" onclick="alert('Logging out...')">LOGOUT / END SESSION</button>
+    </div>
+
+    <div class="container">
+        <h1 style="text-align: left; color: var(--color-text-light); font-size: 2em; margin-bottom: 0;">Nexus Hub: Welcome Back!</h1>
+        <p style="text-align: left; color: var(--color-secondary); margin-top: 5px;">Secure Access Verified. Focus and preparation are essential for fluency.</p>
         
-        <div id="class-selection-widget" class="dashboard-panel class-panel">
-            <h2>Active Class Modules</h2>
-            <div id="class-list">
+        <div id="main-grid">
+            
+            <div id="content-panels">
+                
+                <div id="stats-summary" class="dashboard-panel">
+                    <div style="display: flex; gap: 20px; justify-content: space-around; margin-bottom: 20px;">
+                        <div class="stat-card">
+                            <div class="score" id="stat-int">68</div>
+                            <label>Vocabulary Score</label>
+                        </div>
+                        <div class="stat-card">
+                            <div class="score" id="stat-wis">75</div>
+                            <label>Pragmatics Score</label>
+                        </div>
+                        <div class="stat-card">
+                            <div class="score" id="stat-str">62</div>
+                            <label>Grammar Score</label>
+                        </div>
+                    </div>
+
+                    <h2>Active Class Modules</h2>
+                    <div id="class-list">
+                        </div>
+                    <button class="cta-button-mini" onclick="alert('Launching live session link...')">Join Live Session</button>
                 </div>
-            <button class="cta-button-mini">Join Live Session</button>
-        </div>
 
-        <div id="tools-widget" class="dashboard-panel tools-panel">
-            <h2>Study Tools & Streak</h2>
-            <div id="streak-tracker">
-                <i class="icon-fire"></i> Active Streak: <span id="streak-count" style="color: var(--color-warning);">7 Days</span>
-                <p>Goal: Complete daily vocabulary drill to maintain.</p>
+                <div id="tools-widget" class="dashboard-panel">
+                    <h2>Study Tools & Streak</h2>
+                    <div id="streak-tracker">
+                        <i class="icon-fire">🔥</i> Active Streak: <span id="streak-count" style="color: var(--color-warning);">7 Days</span>
+                        <p>Goal: Complete daily vocabulary drill to maintain.</p>
+                    </div>
+                    <div id="tool-links">
+                        <a href="#" class="tool-link-item">Vocabulary Builder</a>
+                        <a href="#" class="tool-link-item">Pronunciation Lab</a>
+                        <a href="#" class="tool-link-item">Grammar Challenge Bank</a>
+                        <a href="#" class="tool-link-item">Writing Sandbox</a>
+                    </div>
+                </div>
+                
+                <div id="library-widget" class="dashboard-panel">
+                    <h2>Instructional Content Library</h2>
+                    <div id="library-content">
+                        <a href="#" class="library-link-item">Unit 3: Negotiating (B1)</a>
+                        <a href="#" class="library-link-item">Full CEFR Syllabus</a>
+                        <a href="#" class="library-link-item">Personal Feedback Log</a>
+                        <a href="#" class="library-link-item">Progress Reports</a>
+                    </div>
+                </div>
             </div>
-            <div id="tool-links">
-                <a href="#" class="tool-link-item">Vocabulary Builder</a>
-                <a href="#" class="tool-link-item">Pronunciation Lab</a>
-                <a href="#" class="tool-link-item">Grammar Challenge Bank</a>
-            </div>
-        </div>
 
-        <div id="library-widget" class="dashboard-panel library-panel">
-            <h2>Instructional Content Library</h2>
-            <div id="library-links">
-                <a href="#" class="library-link-item">Unit 3: Negotiating (B1)</a>
-                <a href="#" class="library-link-item">Full CEFR Syllabus</a>
-                <a href="#" class="library-link-item">Personal Feedback Log</a>
-                <a href="#" class="library-link-item">Progress Reports</a>
-            </div>
-        </div>
-        
-    </section>
+            <div id="sidebar-panel" class="dashboard-panel">
+                <div id="character-status">
+                    <img src="assets/images/student_avatar.png" alt="Student Avatar" class="avatar">
+                    <h3 style="margin-bottom: 0;">Student: <span id="student-name">Maria Rodriguez</span></h3>
+                    <p class="avatar-label">Level: <span id="student-level">B1 - Intermediate</span></p>
+                </div>
 
-    <section id="status-bar" class="dashboard-panel status-bar-panel">
-        <div class="char-id">
-            <img src="assets/images/student_avatar.png" alt="Student Avatar" class="avatar">
-            <div>
-                <h3>Student: <span id="student-name">Maria Rodriguez</span></h3>
-                <p>Level: <span id="student-level">B1 - Intermediate</span></p>
+                <h2>Current Focus</h2>
+                <label>Next Learning Objective:</label>
+                <p style="color: var(--color-success); font-weight: bold;">Mastering Comparative Structures (The Ship Naming Justification)</p>
+                
+                <div class="mission-status-label">
+                    <span>Current Unit Mastery:</span>
+                    <span id="campaign-percent">85%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 85%;"></div>
+                </div>
+
+                <button id="launch-next-module-btn" class="cta-button-launch" onclick="alert('Launching: The Aetherium Lexicon RPG Mission 1!')">
+                    LAUNCH NEXT MODULE: The Aetherium Lexicon →
+                </button>
             </div>
         </div>
-        
-        <div class="progress-bar-wrap">
-            <label>Current Unit Mastery (Unit 2: Past Tenses):</label>
-            <progress value="85" max="100"></progress>
-            <span>85% Complete</span>
-        </div>
-        
-        <button id="launch-next-module-btn" class="cta-button-launch">LAUNCH NEXT MODULE: The Aetherium Lexicon →</button>
-    </section>
-    
-</div>
+    </div>
+
+    <script>
+        // --- JAVASCRIPT SIMULATION (To be replaced by Firebase data fetch) ---
+        const STUDENT_DATA = {
+            name: 'Maria Rodriguez',
+            level: 'B1 - Intermediate',
+            stats: { INT: 68, WIS: 75, STR: 62 },
+            currentUnit: 'Unit 2: Past Tenses',
+            unitProgress: 85,
+            streak: 7,
+        };
+
+        const ACTIVE_CLASS_MODULES = [
+            { name: 'Mission 1: Ship Naming Protocol', due: 'Due: Today', status: 'In Progress', type: 'rpg' },
+            { name: 'Unit 3 Quiz: Conditional Forms', due: 'Due: Mon, Oct 27', status: 'Pending', type: 'quiz' },
+            { name: 'Writing Practice: Formal Email', due: 'Due: Fri, Oct 24', status: 'Completed', type: 'writing' },
+        ];
+
+        const classListEl = document.getElementById('class-list');
+
+        function renderClassModules() {
+            classListEl.innerHTML = '';
+            
+            ACTIVE_CLASS_MODULES.forEach(module => {
+                const item = document.createElement('div');
+                item.className = 'class-item';
+                
+                let statusColor = module.status === 'Completed' ? 'var(--color-success)' : 
+                                  module.status === 'In Progress' ? 'var(--color-secondary)' : 
+                                  'var(--color-warning)';
+                
+                // Use a different color for the border indicator
+                let indicatorColor = module.status === 'In Progress' ? 'var(--color-secondary)' : 'var(--color-warning)';
+                item.style.borderLeftColor = indicatorColor;
+                
+                item.innerHTML = `
+                    <div>
+                        <strong>${module.name}</strong>
+                        <p class="due-date" style="color: ${statusColor};">${module.due}</p>
+                    </div>
+                    <span style="font-size:0.9em;">${module.status}</span>
+                `;
+                classListEl.appendChild(item);
+            });
+        }
+
+        function renderStudentInfo() {
+            // Update Stats
+            document.getElementById('stat-int').textContent = STUDENT_DATA.stats.INT;
+            document.getElementById('stat-wis').textContent = STUDENT_DATA.stats.WIS;
+            document.getElementById('stat-str').textContent = STUDENT_DATA.stats.STR;
+            
+            // Update Header/Sidebar
+            document.getElementById('student-name').textContent = STUDENT_DATA.name;
+            document.getElementById('student-level').textContent = STUDENT_DATA.level;
+            document.getElementById('streak-count').textContent = `${STUDENT_DATA.streak} Days`;
+            
+            // Update Progress
+            document.querySelector('.mission-status-label').textContent = `Current Unit Mastery (${STUDENT_DATA.currentUnit}):`;
+            document.getElementById('campaign-percent').textContent = `${STUDENT_DATA.unitProgress}%`;
+            document.querySelector('.progress-fill').style.width = `${STUDENT_DATA.unitProgress}%`;
+        }
+
+        function initDashboard() {
+            renderClassModules();
+            renderStudentInfo();
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>
