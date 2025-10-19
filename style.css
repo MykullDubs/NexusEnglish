@@ -1,0 +1,104 @@
+/* --- Dashboard Specific Styles (Adding new elements and styles) --- */
+
+/* Inherits general styles from previous 'Captain's Console' CSS */
+/* Assuming existing :root variables and body/container styles are present */
+
+#core-info-grid {
+    display: grid;
+    grid-template-columns: 1fr; 
+    gap: 20px;
+}
+
+@media (min-width: 1024px) {
+    #core-info-grid {
+        grid-template-columns: repeat(3, 1fr); /* 3 Columns on desktop */
+    }
+}
+
+.dashboard-panel {
+    /* Inherits base panel style */
+    min-height: 220px; /* Ensures visual alignment */
+}
+
+/* --- 1. Class Selection Widget --- */
+.class-item {
+    padding: 12px;
+    margin-bottom: 10px;
+    background-color: rgba(6, 182, 212, 0.15); /* Soft highlight for assignments */
+    border-left: 3px solid var(--color-warning); /* Visual indicator for attention */
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.class-item .due-date {
+    font-size: 0.9em;
+    color: var(--color-warning);
+}
+
+.cta-button-mini {
+    background-color: var(--color-success);
+    color: var(--color-text-dark);
+    border: none;
+    padding: 8px 15px;
+    font-size: 0.9em;
+    margin-top: 15px;
+    width: 100%;
+}
+
+/* --- 2. Study Tools Widget --- */
+#streak-tracker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1em;
+    padding: 10px 0;
+    margin-bottom: 15px;
+    border-bottom: 1px dotted var(--color-primary);
+}
+
+#tool-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.tool-link-item {
+    flex-grow: 1;
+    padding: 10px;
+    background-color: rgba(30, 58, 138, 0.6);
+    color: var(--color-text-light);
+    text-decoration: none;
+    border-radius: 5px;
+    text-align: center;
+    border: 1px solid var(--color-primary);
+}
+
+/* --- 3. Library Widget --- */
+#library-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.library-link-item {
+    /* Softly refined link style */
+    padding: 10px;
+    background-color: rgba(30, 58, 138, 0.6);
+    color: var(--color-text-light);
+    text-decoration: none;
+    border-radius: 5px;
+    border-left: 3px solid var(--color-secondary);
+    text-align: left;
+    transition: background-color 0.2s;
+}
+
+/* --- Status Bar Launch Button --- */
+.cta-button-launch {
+    background-color: var(--color-success);
+    color: var(--color-text-dark);
+    border: none;
+    font-size: 1.1em;
+    padding: 10px 20px;
+}
