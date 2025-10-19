@@ -1,31 +1,147 @@
-/* --- Dashboard Specific Styles (Adding new elements and styles) --- */
+/*
+ * Nexus Hub: General ESL Student Dashboard Styles
+ * Aesthetic: Web 4.0 / Futuristic Control Console
+ * Purpose: Defines a beautiful, highly usable, mobile-first interface.
+ */
 
-/* Inherits general styles from previous 'Captain's Console' CSS */
-/* Assuming existing :root variables and body/container styles are present */
+/* --- 1. CORE WEB 4.0 AESTHETIC & RESET --- */
+:root {
+    --color-primary: #1E3A8A; /* Deep Space Blue */
+    --color-secondary: #06B6D4; /* Cyan/Holo Accent */
+    --color-text-light: #F0F9FF; /* Crisp White */
+    --color-text-dark: #1E293B;
+    --color-panel-bg: rgba(2, 6, 23, 0.9);
+    --color-success: #10B981; /* Green for success */
+    --color-warning: #F59E0B; /* Yellow for caution (for streaks/due dates) */
+    --color-danger: #EF4444; /* Red for high priority/logout */
+}
 
-#core-info-grid {
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    background-color: var(--color-text-dark);
+    color: var(--color-text-light);
+    line-height: 1.6;
+    min-height: 100vh;
+    /* Radial gradient for space depth */
+    background-image: radial-gradient(circle at 50% 150%, var(--color-primary) 0%, transparent 85%); 
+    background-attachment: fixed;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* --- 2. HEADER BAR & UTILITY --- */
+#header-bar {
+    background-color: rgba(0, 0, 0, 0.9);
+    padding: 15px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-secondary);
+}
+
+#header-bar h1 {
+    font-size: 1.2em;
+    color: var(--color-text-light);
+    margin: 0;
+    letter-spacing: 2px;
+}
+
+.logout-btn {
+    background-color: var(--color-danger);
+    color: var(--color-text-light);
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* --- 3. BASE PANEL STYLING & GRID --- */
+#main-grid {
     display: grid;
-    grid-template-columns: 1fr; 
+    grid-template-columns: 1fr; /* Stacked on Mobile */
     gap: 20px;
 }
 
 @media (min-width: 1024px) {
-    #core-info-grid {
-        grid-template-columns: repeat(3, 1fr); /* 3 Columns on desktop */
+    #main-grid {
+        grid-template-columns: 2fr 1fr; /* 2/3 Content, 1/3 Sidebar */
     }
 }
 
-.dashboard-panel {
-    /* Inherits base panel style */
-    min-height: 220px; /* Ensures visual alignment */
+#content-panels {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    gap: 20px;
 }
 
-/* --- 1. Class Selection Widget --- */
+.dashboard-panel {
+    background-color: var(--color-panel-bg);
+    padding: 25px;
+    border-radius: 8px;
+    border: 1px solid var(--color-primary);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+}
+
+.dashboard-panel h2 {
+    color: var(--color-secondary);
+    border-bottom: 1px dashed var(--color-primary);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    font-size: 1.5em;
+}
+
+button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+    border: none;
+}
+
+/* --- 4. WIDGET-SPECIFIC STYLES --- */
+
+/* --- Stats/Class Selection Widget --- */
+#stats-summary {
+    grid-column: 1 / -1; 
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: space-around;
+}
+
+.stat-card {
+    flex: 1 1 200px;
+    padding: 15px;
+    background-color: rgba(30, 58, 138, 0.5);
+    border-radius: 5px;
+    text-align: center;
+    border-left: 3px solid var(--color-secondary);
+}
+.stat-card .score {
+    font-size: 2.5em;
+    font-weight: bold;
+    color: var(--color-success);
+    margin: 5px 0;
+}
+.stat-card label {
+    font-size: 0.9em;
+    color: var(--color-secondary);
+}
+
 .class-item {
     padding: 12px;
     margin-bottom: 10px;
-    background-color: rgba(6, 182, 212, 0.15); /* Soft highlight for assignments */
-    border-left: 3px solid var(--color-warning); /* Visual indicator for attention */
+    background-color: rgba(6, 182, 212, 0.15); 
+    border-left: 3px solid var(--color-warning); 
     border-radius: 3px;
     display: flex;
     justify-content: space-between;
@@ -40,14 +156,13 @@
 .cta-button-mini {
     background-color: var(--color-success);
     color: var(--color-text-dark);
-    border: none;
     padding: 8px 15px;
     font-size: 0.9em;
     margin-top: 15px;
     width: 100%;
 }
 
-/* --- 2. Study Tools Widget --- */
+/* --- Study Tools Widget --- */
 #streak-tracker {
     display: flex;
     align-items: center;
@@ -56,6 +171,11 @@
     padding: 10px 0;
     margin-bottom: 15px;
     border-bottom: 1px dotted var(--color-primary);
+}
+
+#streak-tracker i { /* Placeholder for a fire/flame icon */
+    color: var(--color-warning);
+    font-size: 1.3em;
 }
 
 #tool-links {
@@ -75,30 +195,71 @@
     border: 1px solid var(--color-primary);
 }
 
-/* --- 3. Library Widget --- */
-#library-links {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+/* --- Content Library Widget --- */
+#library-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
 }
-
 .library-link-item {
-    /* Softly refined link style */
-    padding: 10px;
+    display: block;
     background-color: rgba(30, 58, 138, 0.6);
     color: var(--color-text-light);
+    padding: 15px;
     text-decoration: none;
     border-radius: 5px;
-    border-left: 3px solid var(--color-secondary);
-    text-align: left;
-    transition: background-color 0.2s;
+    border: 1px solid var(--color-primary);
+    transition: all 0.2s;
 }
 
-/* --- Status Bar Launch Button --- */
-.cta-button-launch {
+/* --- 5. SIDEBAR / STATUS BAR --- */
+#sidebar-panel {
+    min-height: 500px;
+}
+
+#character-status {
+    text-align: center;
+    margin-bottom: 25px;
+    padding-bottom: 25px;
+    border-bottom: 1px dashed var(--color-primary);
+}
+.avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 3px solid var(--color-secondary);
+    margin-bottom: 10px;
+}
+.avatar-label {
+    color: var(--color-secondary);
+}
+
+.mission-status-label {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+    font-weight: bold;
+}
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 5px;
+}
+.progress-fill {
+    height: 100%;
+    background-color: var(--color-success);
+    transition: width 0.5s;
+}
+
+#launch-next-module-btn {
+    width: 100%;
     background-color: var(--color-success);
     color: var(--color-text-dark);
     border: none;
     font-size: 1.1em;
-    padding: 10px 20px;
+    padding: 12px 20px;
+    margin-top: 25px;
 }
