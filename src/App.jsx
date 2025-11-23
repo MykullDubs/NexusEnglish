@@ -4,7 +4,7 @@ import {
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
   X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw,
   Utensils, Droplets, Bone, Coffee, Settings, ArrowUp, ArrowDown, 
-  Eye, EyeOff, Download, Save
+  Eye, EyeOff, Download, Save, GripHorizontal
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -13,8 +13,9 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, getDoc,
-  doc, onSnapshot, query 
+  doc, onSnapshot, query, orderBy, writeBatch
 } from "firebase/firestore";
+import { Reorder } from "framer-motion";
 
 // --- 1. PASTE YOUR FIREBASE CONFIG HERE ---
   const firebaseConfig = {
@@ -126,9 +127,9 @@ export default function App() {
   
   // App Settings State
   const [settings, setSettings] = useState({
-    tempUnit: 'C', // or F
-    weightUnit: 'kg', // or lbs
-    heightUnit: 'cm', // or ft
+    tempUnit: 'C', 
+    weightUnit: 'kg', 
+    heightUnit: 'cm', 
     dashboardOrder: [
       { id: 'symptom', visible: true, label: 'Symptom' },
       { id: 'medicine', visible: true, label: 'Medicine' },
@@ -166,7 +167,6 @@ export default function App() {
   
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
 
-  // 1. Auth Effect
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -179,7 +179,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Fetch Settings Effect
   useEffect(() => {
     if (!user) return;
     const fetchSettings = async () => {
@@ -194,26 +193,38 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  // 3. Data Fetching Effect
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
     setFetchError(null);
     
-    const q = query(collection(db, 'users', user.uid, 'children'));
+    // Order by the 'order' field, ascending
+    const q = query(collection(db, 'users', user.uid, 'children'), orderBy('order', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setChildren(data);
       setDataLoading(false);
     }, (error) => {
-      console.error("Error fetching children:", error);
-      setFetchError(error.message);
-      setDataLoading(false);
+      // Fallback if 'order' field is missing or index not built yet (though simple orderBy often works)
+      if (error.message.includes("The query requires an index") || error.message.includes("No matching")) {
+         // Retry without sort and we'll sort in JS, or just show raw
+         const fallbackQ = query(collection(db, 'users', user.uid, 'children'));
+         onSnapshot(fallbackQ, (snap) => {
+            const d = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Sort in JS if 'order' exists, else by createdAt
+            d.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || ''));
+            setChildren(d);
+            setDataLoading(false);
+         });
+      } else {
+        console.error("Error fetching children:", error);
+        setFetchError(error.message);
+        setDataLoading(false);
+      }
     });
     return () => unsubscribe();
   }, [user]);
 
-  // 4. Selection Logic Effect
   useEffect(() => {
     if (children.length > 0 && !selectedChild) {
       setSelectedChild(children[0]);
@@ -222,7 +233,6 @@ export default function App() {
     }
   }, [children, selectedChild]);
 
-  // 5. Logs Fetching Effect
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'users', user.uid, 'logs'));
@@ -233,86 +243,38 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- Settings Handlers ---
-  const handleSaveSettings = async (newSettings) => {
-    setSettings(newSettings);
-    if (user) {
-      try {
-        await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings);
-      } catch (e) { console.error("Error saving settings", e); }
+  // --- Handlers ---
+  const handleReorder = async (newOrder) => {
+    setChildren(newOrder); // Optimistic UI update
+    if (!user) return;
+    
+    try {
+      const batch = writeBatch(db);
+      newOrder.forEach((child, index) => {
+        const ref = doc(db, 'users', user.uid, 'children', child.id);
+        batch.update(ref, { order: index });
+      });
+      await batch.commit();
+    } catch (e) {
+      console.error("Reorder save failed", e);
     }
   };
 
-  const toggleWidgetVisibility = (id) => {
-    const newOrder = settings.dashboardOrder.map(w => 
-      w.id === id ? { ...w, visible: !w.visible } : w
-    );
-    handleSaveSettings({ ...settings, dashboardOrder: newOrder });
+  const handleSaveSettings = async (newSettings) => {
+    setSettings(newSettings);
+    if (user) {
+      try { await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings); } catch (e) { console.error("Error saving settings", e); }
+    }
   };
 
-  const moveWidget = (index, direction) => {
-    const newOrder = [...settings.dashboardOrder];
-    const item = newOrder[index];
-    // Remove item
-    newOrder.splice(index, 1);
-    // Insert at new position
-    if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item);
-    else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item);
-    
-    handleSaveSettings({ ...settings, dashboardOrder: newOrder });
-  };
-
-  const handleExportData = () => {
-    const dataStr = JSON.stringify({ children, logs, settings }, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `family-health-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-  };
-
-  // --- Auth Handlers ---
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try { await signInWithPopup(auth, provider); } 
-    catch (error) { setAuthError("Google sign in failed."); }
-  };
-
-  const handleEmailAuth = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    if (!email || !password) return;
-    try {
-      if (isSignUp) await createUserWithEmailAndPassword(auth, email, password);
-      else await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) { setAuthError("Authentication failed. Check email/password."); }
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword('');
-  };
-
-  // --- Standard Handlers ---
-  const handleActionClick = (actionType) => {
-    if (actionType === 'symptom') setIsSymptomOpen(true);
-    if (actionType === 'medicine') setIsMedicineOpen(true);
-    if (actionType === 'nutrition') setIsNutritionOpen(true);
-    if (actionType === 'growth') setIsStatsOpen(true);
-  };
-
-  // ... (Keep existing Add handlers: handleAddChild, handleAddSymptom, etc. from previous code)
-  // Copying simplified versions for brevity, logic remains same
-  const handleAddChild = async (e) => {
-    e.preventDefault();
-    if (!newChildName.trim() || !user) return;
-    try {
-      const docRef = await addDoc(collection(db, 'users', user.uid, 'children'), { name: newChildName, type: newProfileType, height: newHeight, weight: newWeight, createdAt: new Date().toISOString() });
-      if (newWeight || newHeight) await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: docRef.id, type: 'measurement', timestamp: new Date().toISOString(), height: newHeight, weight: newWeight, note: 'Initial Profile' });
-      setNewChildName(''); setNewProfileType('child'); setNewHeight(''); setNewWeight(''); setIsAddChildOpen(false);
-    } catch (err) { alert("Save Failed: " + err.message); }
-  };
+  // ... (Simplified handlers for brevity - same logic as before)
+  const handleAddChild = async (e) => { e.preventDefault(); if(!newChildName.trim()||!user)return; try{ const order = children.length; const docRef = await addDoc(collection(db,'users',user.uid,'children'),{name:newChildName,type:newProfileType,height:newHeight,weight:newWeight,order,createdAt:new Date().toISOString()}); if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{childId:docRef.id,type:'measurement',timestamp:new Date().toISOString(),height:newHeight,weight:newWeight,note:'Initial Profile'}); setNewChildName('');setNewProfileType('child');setNewHeight('');setNewWeight('');setIsAddChildOpen(false); }catch(err){alert("Save Failed: "+err.message);} };
+  const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
+  const moveWidget = (index, direction) => { const newOrder = [...settings.dashboardOrder]; const item = newOrder[index]; newOrder.splice(index, 1); if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
+  const handleExportData = () => { const dataStr = JSON.stringify({ children, logs, settings }, null, 2); const blob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `family-health-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); };
+  const handleGoogleLogin = async () => { const provider = new GoogleAuthProvider(); try { await signInWithPopup(auth, provider); } catch (error) { setAuthError("Google sign in failed."); } };
+  const handleEmailAuth = async (e) => { e.preventDefault(); setAuthError(''); if (!email || !password) return; try { if (isSignUp) await createUserWithEmailAndPassword(auth, email, password); else await signInWithEmailAndPassword(auth, email, password); } catch (err) { setAuthError("Authentication failed. Check email/password."); } };
+  const handleLogout = async () => { await signOut(auth); setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword(''); };
   const handleAddSymptom = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note }); setLogForm({...logForm, temp: '', symptoms: [], note: ''}); setIsSymptomOpen(false); };
   const handleAddMedicine = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note }); setLogForm({...logForm, medicineName: '', dosage: '', note: ''}); setIsMedicineOpen(false); };
   const handleAddStats = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'measurement', timestamp: new Date().toISOString(), weight: logForm.weight, height: logForm.height, note: logForm.note }); const updates = {}; if(logForm.weight) updates.weight = logForm.weight; if(logForm.height) updates.height = logForm.height; if(Object.keys(updates).length>0) await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates); setLogForm({...logForm, weight: '', height: '', note: ''}); setIsStatsOpen(false); };
@@ -320,7 +282,6 @@ export default function App() {
   const deleteLog = async (id) => { if(window.confirm("Delete?")) await deleteDoc(doc(db, 'users', user.uid, 'logs', id)); };
   const toggleSymptom = (s) => { if(logForm.symptoms.includes(s)) setLogForm({...logForm, symptoms: logForm.symptoms.filter(x=>x!==s)}); else setLogForm({...logForm, symptoms: [...logForm.symptoms, s]}); };
 
-  // --- Derived UI ---
   const isPet = selectedChild?.type === 'pet';
   const themeBg = isPet ? 'bg-amber-600' : 'bg-indigo-600';
   const currentChildLogs = logs.filter(l => l.childId === selectedChild?.id);
@@ -329,24 +290,9 @@ export default function App() {
   const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // --- Loading / Auth Views (Keeping compact as they are same as previous) ---
+  // --- Views (Loading / Auth / Error - same as before) ---
   if (authLoading || (user && dataLoading)) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-400 font-medium">Loading...</p></div>;
-  if (!user) return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center">
-        <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={32} className="text-indigo-600" /></div>
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">Family Health Status</h1>
-        <Button onClick={handleGoogleLogin} variant="google" className="mb-6 py-3 border-slate-200 border shadow-sm"><LogIn size={20} /> Sign in with Google</Button>
-        <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
-          {authError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">{authError}</div>}
-          <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><div className="relative"><Mail className="absolute left-3 top-3 text-slate-400" size={18} /><input type="email" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div>
-          <div><label className="block text-sm font-medium text-slate-700 mb-1">Password</label><div className="relative"><Lock className="absolute left-3 top-3 text-slate-400" size={18} /><input type="password" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div>
-          <Button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white">{isSignUp ? "Create Account" : "Log In"}</Button>
-        </form>
-        <button onClick={() => setIsSignUp(!isSignUp)} className="mt-6 text-indigo-600 text-sm font-medium hover:text-indigo-800">{isSignUp ? "Log In" : "Sign Up"}</button>
-      </div>
-    </div>
-  );
+  if (!user) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6"><div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center"><div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={32} className="text-indigo-600" /></div><h1 className="text-2xl font-bold text-slate-800 mb-2">Family Health Status</h1><Button onClick={handleGoogleLogin} variant="google" className="mb-6 py-3 border-slate-200 border shadow-sm"><LogIn size={20} /> Sign in with Google</Button><form onSubmit={handleEmailAuth} className="space-y-4 text-left">{authError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">{authError}</div>}<div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><div className="relative"><Mail className="absolute left-3 top-3 text-slate-400" size={18} /><input type="email" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Password</label><div className="relative"><Lock className="absolute left-3 top-3 text-slate-400" size={18} /><input type="password" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div><Button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white">{isSignUp ? "Create Account" : "Log In"}</Button></form><button onClick={() => setIsSignUp(!isSignUp)} className="mt-6 text-indigo-600 text-sm font-medium hover:text-indigo-800">{isSignUp ? "Log In" : "Sign Up"}</button></div></div>;
   if (fetchError) return <div className="p-6 text-center"><h1 className="text-red-600 font-bold">Error</h1><p>{fetchError}</p><Button onClick={() => window.location.reload()}>Retry</Button></div>;
 
   // --- Onboarding ---
@@ -375,7 +321,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-0">
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
         
-        {/* Header */}
+        {/* Header with Draggable Profiles */}
         <div className={`${themeBg} p-6 pb-8 text-white rounded-b-[2.5rem] shadow-lg z-10 transition-colors duration-500`}>
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-lg font-bold flex items-center gap-2 opacity-90"><Activity size={20} /> Family Health</h1>
@@ -384,11 +330,26 @@ export default function App() {
               <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"><Settings size={18} /></button>
             </div>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
+          
+          {/* Draggable Reorder List */}
+          <Reorder.Group 
+            axis="x" 
+            values={children} 
+            onReorder={handleReorder} 
+            className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x"
+          >
             {children.map(child => (
-              <button key={child.id} onClick={() => setSelectedChild(child)} className={`flex-shrink-0 snap-start px-4 py-2 rounded-full flex items-center gap-2 transition-all border ${selectedChild?.id === child.id ? `bg-white ${child.type === 'pet' ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}>{child.type === 'pet' ? <PawPrint size={14} /> : <Baby size={14} />}{child.name}</button>
+              <Reorder.Item key={child.id} value={child} className="flex-shrink-0 snap-start">
+                <button 
+                  onClick={() => setSelectedChild(child)}
+                  className={`px-4 py-2 rounded-full flex items-center gap-2 transition-all border select-none ${selectedChild?.id === child.id ? `bg-white ${child.type === 'pet' ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}
+                >
+                  {child.type === 'pet' ? <PawPrint size={14} /> : <Baby size={14} />}{child.name}
+                </button>
+              </Reorder.Item>
             ))}
-          </div>
+          </Reorder.Group>
+
           {selectedChild && (
             <div className="flex justify-between items-center mt-2">
               <div className="flex items-center gap-4 text-sm text-white/90 bg-black/10 px-4 py-2 rounded-xl backdrop-blur-md">
@@ -403,30 +364,15 @@ export default function App() {
         <div className="px-6 -mt-8 z-20 grid grid-cols-2 gap-3">
           {settings.dashboardOrder.filter(w => w.visible).map((widget) => {
             const style = "bg-white p-4 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex items-center justify-center gap-3 hover:-translate-y-1 transition-transform";
-            if (widget.id === 'symptom') return (
-              <button key={widget.id} onClick={() => setIsSymptomOpen(true)} className={style}>
-                <div className="p-2 bg-red-50 text-red-500 rounded-full"><Thermometer size={20} /></div><span className="text-sm font-bold text-slate-600">Symptom</span>
-              </button>
-            );
-            if (widget.id === 'medicine') return (
-              <button key={widget.id} onClick={() => setIsMedicineOpen(true)} className={style}>
-                <div className="p-2 bg-blue-50 text-blue-500 rounded-full"><Pill size={20} /></div><span className="text-sm font-bold text-slate-600">Meds</span>
-              </button>
-            );
-            if (widget.id === 'nutrition') return (
-              <button key={widget.id} onClick={() => setIsNutritionOpen(true)} className={style}>
-                <div className="p-2 bg-orange-50 text-orange-500 rounded-full">{isPet ? <Bone size={20} /> : <Utensils size={20} />}</div><span className="text-sm font-bold text-slate-600">Nutrition</span>
-              </button>
-            );
-            if (widget.id === 'growth') return (
-              <button key={widget.id} onClick={() => setIsStatsOpen(true)} className={style}>
-                <div className="p-2 bg-emerald-50 text-emerald-500 rounded-full"><Weight size={20} /></div><span className="text-sm font-bold text-slate-600">Growth</span>
-              </button>
-            );
+            if (widget.id === 'symptom') return <button key={widget.id} onClick={() => setIsSymptomOpen(true)} className={style}><div className="p-2 bg-red-50 text-red-500 rounded-full"><Thermometer size={20} /></div><span className="text-sm font-bold text-slate-600">Symptom</span></button>;
+            if (widget.id === 'medicine') return <button key={widget.id} onClick={() => setIsMedicineOpen(true)} className={style}><div className="p-2 bg-blue-50 text-blue-500 rounded-full"><Pill size={20} /></div><span className="text-sm font-bold text-slate-600">Meds</span></button>;
+            if (widget.id === 'nutrition') return <button key={widget.id} onClick={() => setIsNutritionOpen(true)} className={style}><div className="p-2 bg-orange-50 text-orange-500 rounded-full">{isPet ? <Bone size={20} /> : <Utensils size={20} />}</div><span className="text-sm font-bold text-slate-600">Nutrition</span></button>;
+            if (widget.id === 'growth') return <button key={widget.id} onClick={() => setIsStatsOpen(true)} className={style}><div className="p-2 bg-emerald-50 text-emerald-500 rounded-full"><Weight size={20} /></div><span className="text-sm font-bold text-slate-600">Growth</span></button>;
             return null;
           })}
         </div>
 
+        {/* View Toggles & Charts / Timeline (Same as before) */}
         <div className="px-6 mt-6 mb-2">
            <div className="bg-slate-100 p-1 rounded-xl flex">
              <button onClick={() => setViewMode('timeline')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'timeline' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}><List size={16} /> Timeline</button>
@@ -434,7 +380,6 @@ export default function App() {
            </div>
         </div>
 
-        {/* Main Content Area */}
         <div className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
           {viewMode === 'timeline' ? (
             <div className="space-y-4">
@@ -444,7 +389,6 @@ export default function App() {
                   <div className={`absolute -left-[7px] top-4 w-3 h-3 rounded-full border-2 border-slate-50 shadow-sm ${log.type === 'medicine' ? 'bg-blue-500' : log.type === 'measurement' ? 'bg-emerald-500' : log.type === 'nutrition' ? 'bg-orange-500' : 'bg-red-500'}`} />
                   <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold uppercase tracking-wider text-slate-400">{log.type} &bull; {formatDate(log.timestamp)} {formatTime(log.timestamp)}</span><button onClick={() => deleteLog(log.id)} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button></div>
-                    {/* Log display logic... */}
                     {log.type === 'symptom' && <div className="flex items-start gap-3">{log.temperature && <div className="text-2xl font-bold text-slate-700">{log.temperature}°{settings.tempUnit}</div>}<div className="flex flex-wrap gap-1">{log.symptoms?.map(s => <span key={s} className="px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded-md font-medium">{s}</span>)}</div></div>}
                     {log.type === 'medicine' && <div><div className="font-bold text-slate-700 text-lg">{log.medicineName}</div><div className="text-slate-500 text-sm">{log.dosage}</div></div>}
                     {log.type === 'nutrition' && <div className="flex items-center gap-3"><div className="p-2 bg-orange-50 text-orange-600 rounded-full">{log.nutritionType === 'liquid' || log.nutritionType === 'water' ? <Droplets size={20} /> : isPet ? <Bone size={20} /> : <Utensils size={20} />}</div><div><div className="font-bold text-slate-700">{log.item || (log.nutritionType === 'water' ? 'Water Refill' : 'Meal')}</div>{log.amount && <div className="text-slate-500 text-sm">{log.amount}</div>}</div></div>}
@@ -463,101 +407,21 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- SETTINGS MODAL --- */}
+      {/* Settings Modal (Same as before) */}
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="App Settings">
         <div className="space-y-8">
-          {/* Unit Preferences */}
-          <div>
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Units</h4>
-            <div className="bg-slate-50 p-4 rounded-2xl space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-slate-700">Temperature</span>
-                <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-                  <button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'C' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.tempUnit === 'C' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>°C</button>
-                  <button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'F' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.tempUnit === 'F' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>°F</button>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-slate-700">Weight</span>
-                <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-                  <button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'kg' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.weightUnit === 'kg' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>kg</button>
-                  <button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'lbs' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.weightUnit === 'lbs' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>lbs</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Dashboard Layout */}
-          <div>
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Dashboard Widgets</h4>
-            <div className="bg-slate-50 p-2 rounded-2xl space-y-2">
-              {settings.dashboardOrder.map((widget, idx) => (
-                <div key={widget.id} className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => toggleWidgetVisibility(widget.id)} className={`p-2 rounded-lg transition-colors ${widget.visible ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-                      {widget.visible ? <Eye size={18} /> : <EyeOff size={18} />}
-                    </button>
-                    <span className={`font-medium ${widget.visible ? 'text-slate-700' : 'text-slate-400'}`}>{widget.label}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <button disabled={idx === 0} onClick={() => moveWidget(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 disabled:opacity-30"><ArrowUp size={18} /></button>
-                    <button disabled={idx === settings.dashboardOrder.length - 1} onClick={() => moveWidget(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 disabled:opacity-30"><ArrowDown size={18} /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Data & Account */}
-          <div>
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Data & Account</h4>
-            <Button variant="outline" onClick={handleExportData} className="w-full mb-3 justify-start"><Download size={18} /> Export Data (JSON)</Button>
-            <Button variant="danger" onClick={handleLogout} className="w-full justify-start"><LogOut size={18} /> Sign Out</Button>
-          </div>
+          <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Units</h4><div className="bg-slate-50 p-4 rounded-2xl space-y-4"><div className="flex justify-between items-center"><span className="font-medium text-slate-700">Temperature</span><div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'C' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.tempUnit === 'C' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>°C</button><button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'F' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.tempUnit === 'F' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>°F</button></div></div><div className="flex justify-between items-center"><span className="font-medium text-slate-700">Weight</span><div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'kg' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.weightUnit === 'kg' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>kg</button><button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'lbs' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.weightUnit === 'lbs' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>lbs</button></div></div></div></div>
+          <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Dashboard Widgets</h4><div className="bg-slate-50 p-2 rounded-2xl space-y-2">{settings.dashboardOrder.map((widget, idx) => (<div key={widget.id} className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><button onClick={() => toggleWidgetVisibility(widget.id)} className={`p-2 rounded-lg transition-colors ${widget.visible ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>{widget.visible ? <Eye size={18} /> : <EyeOff size={18} />}</button><span className={`font-medium ${widget.visible ? 'text-slate-700' : 'text-slate-400'}`}>{widget.label}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveWidget(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 disabled:opacity-30"><ArrowUp size={18} /></button><button disabled={idx === settings.dashboardOrder.length - 1} onClick={() => moveWidget(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 disabled:opacity-30"><ArrowDown size={18} /></button></div></div>))}</div></div>
+          <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Data & Account</h4><Button variant="outline" onClick={handleExportData} className="w-full mb-3 justify-start"><Download size={18} /> Export Data (JSON)</Button><Button variant="danger" onClick={handleLogout} className="w-full justify-start"><LogOut size={18} /> Sign Out</Button></div>
         </div>
       </Modal>
 
-      {/* ... (Keep existing Modals: AddChild, Stats, Symptom, Medicine, Nutrition) ... */}
-      {/* Reusing previous modal implementations, they just need to use settings.units where applicable */}
-      
-      <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
-         <form onSubmit={handleAddChild} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div>
-            <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" />
-            <Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button>
-         </form>
-      </Modal>
-
-      <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth">
-        <form onSubmit={handleAddStats} className="space-y-4">
-          <div><label className="block text-sm font-medium text-slate-700">Weight ({settings.weightUnit})</label><input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.weight} onChange={(e) => setLogForm({...logForm, weight: e.target.value})} placeholder={`e.g. 20.5 ${settings.weightUnit}`} /></div>
-          <div><label className="block text-sm font-medium text-slate-700">Height ({settings.heightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.height} onChange={(e) => setLogForm({...logForm, height: e.target.value})} placeholder={`e.g. 110 ${settings.heightUnit}`} /></div>
-          <Button type="submit" className="w-full">Save</Button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms">
-        <form onSubmit={handleAddSymptom} className="space-y-6">
-          <div><label className="block text-sm font-medium text-slate-700 mb-2">Temperature (°{settings.tempUnit})</label><div className="flex gap-2"><input type="number" step="0.1" className="flex-1 p-4 text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl" value={logForm.temp} onChange={(e) => setLogForm({ ...logForm, temp: e.target.value })} /><div className="flex items-center justify-center bg-slate-100 w-16 rounded-xl font-bold">°{settings.tempUnit}</div></div></div>
-          <div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200'}`}>{sym}</button>))}</div>
-          <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} />
-          <Button type="submit" className="w-full">Save</Button>
-        </form>
-      </Modal>
-
+      {/* Other Modals (Add, Stats, Symptom, Medicine, Nutrition - same as previous) */}
+      <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile"><form onSubmit={handleAddChild} className="space-y-4"><div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" /><Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button></form></Modal>
+      <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth"><form onSubmit={handleAddStats} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700">Weight ({settings.weightUnit})</label><input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.weight} onChange={(e) => setLogForm({...logForm, weight: e.target.value})} placeholder={`e.g. 20.5 ${settings.weightUnit}`} /></div><div><label className="block text-sm font-medium text-slate-700">Height ({settings.heightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.height} onChange={(e) => setLogForm({...logForm, height: e.target.value})} placeholder={`e.g. 110 ${settings.heightUnit}`} /></div><Button type="submit" className="w-full">Save</Button></form></Modal>
+      <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms"><form onSubmit={handleAddSymptom} className="space-y-6"><div><label className="block text-sm font-medium text-slate-700 mb-2">Temperature (°{settings.tempUnit})</label><div className="flex gap-2"><input type="number" step="0.1" className="flex-1 p-4 text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl" value={logForm.temp} onChange={(e) => setLogForm({ ...logForm, temp: e.target.value })} /><div className="flex items-center justify-center bg-slate-100 w-16 rounded-xl font-bold">°{settings.tempUnit}</div></div></div><div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200'}`}>{sym}</button>))}</div><textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /><Button type="submit" className="w-full">Save</Button></form></Modal>
       <Modal isOpen={isMedicineOpen} onClose={() => setIsMedicineOpen(false)} title="Log Medicine"><form onSubmit={handleAddMedicine} className="space-y-4"><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Medicine Name" value={logForm.medicineName} onChange={(e) => setLogForm({ ...logForm, medicineName: e.target.value })} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Dosage" value={logForm.dosage} onChange={(e) => setLogForm({ ...logForm, dosage: e.target.value })} /><Button type="submit" className="w-full">Log Medicine</Button></form></Modal>
-      
-      <Modal isOpen={isNutritionOpen} onClose={() => setIsNutritionOpen(false)} title="Log Nutrition">
-        <form onSubmit={handleAddNutrition} className="space-y-4">
-          <div className="flex gap-4 mb-2">
-             <button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'food'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'food' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'border-slate-200'}`}>{isPet ? <Bone /> : <Utensils />} Food</button>
-             <button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'liquid'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'liquid' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200'}`}><Droplets /> Drink</button>
-          </div>
-          <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Item / Type" value={logForm.item} onChange={(e) => setLogForm({...logForm, item: e.target.value})} />
-          <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Amount" value={logForm.amount} onChange={(e) => setLogForm({...logForm, amount: e.target.value})} />
-          <Button type="submit" className="w-full bg-orange-600 shadow-orange-200 hover:bg-orange-700">Log</Button>
-        </form>
-      </Modal>
+      <Modal isOpen={isNutritionOpen} onClose={() => setIsNutritionOpen(false)} title="Log Nutrition"><form onSubmit={handleAddNutrition} className="space-y-4"><div className="flex gap-4 mb-2"><button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'food'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'food' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'border-slate-200'}`}>{isPet ? <Bone /> : <Utensils />} Food</button><button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'liquid'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'liquid' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200'}`}><Droplets /> Drink</button></div><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Item / Type" value={logForm.item} onChange={(e) => setLogForm({...logForm, item: e.target.value})} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Amount" value={logForm.amount} onChange={(e) => setLogForm({...logForm, amount: e.target.value})} /><Button type="submit" className="w-full bg-orange-600 shadow-orange-200 hover:bg-orange-700">Log</Button></form></Modal>
 
     </div>
   );
