@@ -1,22 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Plus, 
-  Thermometer, 
-  Pill, 
-  Clock, 
-  Baby, 
-  PawPrint,
-  Ruler,
-  Weight,
-  ChevronRight,
-  Trash2, 
-  Activity, 
-  StickyNote,
-  Calendar,
-  UserPlus,
-  X,
-  TrendingUp,
-  List
+  Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
+  ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
+  X, TrendingUp, List, LogOut, LogIn
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
