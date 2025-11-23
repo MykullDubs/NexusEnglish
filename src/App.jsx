@@ -2,17 +2,19 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
-  X, TrendingUp, List, LogOut, LogIn 
+  X, TrendingUp, List, LogOut, LogIn, Mail, Lock
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
-  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, deleteDoc, updateDoc,
   doc, onSnapshot, query 
 } from "firebase/firestore";
 
+// --- 1. PASTE YOUR FIREBASE CONFIG HERE ---
   const firebaseConfig = {
     apiKey: "AIzaSyCfjzFY_yZQv66hF_Ob9-wHk1klKBe5rHw",
     authDomain: "nexusenglish-3e9c3.firebaseapp.com",
@@ -23,7 +25,6 @@ import {
     appId: "1:18259366717:web:5cd2e6239f58b18b9f6b54",
     measurementId: "G-YX9PTFX8G5"
   };
-
 // --- 2. Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -39,7 +40,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
     secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
     danger: "bg-red-50 text-red-600 hover:bg-red-100",
     ghost: "bg-transparent text-slate-500 hover:bg-slate-100",
-    google: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+    google: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 w-full"
   };
   return <button type={type} onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant]} ${className}`}>{children}</button>;
 };
@@ -122,16 +123,26 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
 
+  // UI States
   const [viewMode, setViewMode] = useState('timeline');
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
   const [isSymptomOpen, setIsSymptomOpen] = useState(false);
   const [isMedicineOpen, setIsMedicineOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+
+  // Auth Form States
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // Data Form States
   const [newChildName, setNewChildName] = useState('');
   const [newProfileType, setNewProfileType] = useState('child');
   const [newHeight, setNewHeight] = useState('');
   const [newWeight, setNewWeight] = useState('');
   const [logForm, setLogForm] = useState({ temp: '', symptoms: [], note: '', medicineName: '', dosage: '', weight: '', height: '' });
+  
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
 
   // 1. Auth Effect
@@ -139,7 +150,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
-      if (!u) setDataLoading(false); // No user means data loading is "done" (nothing to load)
+      if (!u) setDataLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -147,12 +158,12 @@ export default function App() {
   // 2. Data Fetching Effect (Children)
   useEffect(() => {
     if (!user) return;
-    setDataLoading(true); // Start loading when user is found
+    setDataLoading(true);
     const q = query(collection(db, 'users', user.uid, 'children'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setChildren(data);
-      setDataLoading(false); // Stop loading once we have data
+      setDataLoading(false);
     }, (error) => {
       console.error("Error fetching children:", error);
       setDataLoading(false);
@@ -163,10 +174,8 @@ export default function App() {
   // 3. Selection Logic Effect
   useEffect(() => {
     if (children.length > 0 && !selectedChild) {
-      // Default to first child
       setSelectedChild(children[0]);
     } else if (selectedChild && !children.find(c => c.id === selectedChild.id)) {
-      // If selected child was deleted, switch to another or null
       setSelectedChild(children.length > 0 ? children[0] : null);
     }
   }, [children, selectedChild]);
@@ -188,7 +197,28 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Login failed:", error);
-      alert("Login failed. See console for details.");
+      setAuthError("Google sign in failed.");
+    }
+  };
+
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!email || !password) return;
+    try {
+      if (isSignUp) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      console.error(err);
+      // Basic error formatting
+      let msg = "Authentication failed.";
+      if (err.code === 'auth/invalid-credential') msg = "Incorrect email or password.";
+      if (err.code === 'auth/email-already-in-use') msg = "Email already in use.";
+      if (err.code === 'auth/weak-password') msg = "Password should be at least 6 chars.";
+      setAuthError(msg);
     }
   };
 
@@ -197,12 +227,15 @@ export default function App() {
     setChildren([]);
     setLogs([]);
     setSelectedChild(null);
+    setEmail('');
+    setPassword('');
   };
 
   const currentChildLogs = logs.filter(l => l.childId === selectedChild?.id);
   const temperatureData = useMemo(() => currentChildLogs.filter(l => l.type === 'symptom' && l.temperature).map(l => ({ date: l.timestamp, value: l.temperature })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
   const weightData = useMemo(() => currentChildLogs.filter(l => l.type === 'measurement' && l.weight).map(l => ({ date: l.timestamp, value: l.weight })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
 
+  // --- Action Handlers (Same as before) ---
   const handleAddChild = async (e) => {
     e.preventDefault();
     if (!newChildName.trim() || !user) return;
@@ -293,9 +326,59 @@ export default function App() {
           <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={32} className="text-indigo-600" /></div>
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Family Health Status</h1>
           <p className="text-slate-500 mb-8">Log in to track fevers, meds, and growth for your kids and pets across all your devices.</p>
-          <Button onClick={handleGoogleLogin} variant="google" className="w-full py-4 text-lg border-2 border-slate-200">
+          
+          <Button onClick={handleGoogleLogin} variant="google" className="mb-6 py-3 border-slate-200 border shadow-sm">
             <LogIn size={20} /> Sign in with Google
           </Button>
+
+          <div className="flex items-center gap-4 mb-6">
+            <div className="h-px bg-slate-200 flex-1"></div>
+            <span className="text-slate-400 text-sm">OR</span>
+            <div className="h-px bg-slate-200 flex-1"></div>
+          </div>
+
+          <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
+            {authError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">{authError}</div>}
+            
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
+                <input 
+                  type="email" 
+                  className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 text-slate-400" size={18} />
+                <input 
+                  type="password" 
+                  className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <Button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white">
+              {isSignUp ? "Create Account" : "Log In"}
+            </Button>
+          </form>
+
+          <button 
+            onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+            className="mt-6 text-indigo-600 text-sm font-medium hover:text-indigo-800"
+          >
+            {isSignUp ? "Already have an account? Log In" : "Need an account? Sign Up"}
+          </button>
         </div>
       </div>
     );
