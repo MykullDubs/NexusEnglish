@@ -193,34 +193,34 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
+  // FIX: Removed orderBy so it finds profiles even if they are missing the 'order' field
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
     setFetchError(null);
     
-    // Order by the 'order' field, ascending
-    const q = query(collection(db, 'users', user.uid, 'children'), orderBy('order', 'asc'));
+    // We fetch ALL children first
+    const q = query(collection(db, 'users', user.uid, 'children'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Then we sort them manually in JavaScript
+      // This allows old profiles (no 'order') to show up alongside new ones
+      data.sort((a, b) => {
+        // Default order to 9999 so new items (with order) might float to top, or swap logic as preferred
+        const orderA = a.order ?? 9999; 
+        const orderB = b.order ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        // Fallback to creation date
+        return (a.createdAt || '').localeCompare(b.createdAt || '');
+      });
+
       setChildren(data);
       setDataLoading(false);
     }, (error) => {
-      // Fallback if 'order' field is missing or index not built yet (though simple orderBy often works)
-      if (error.message.includes("The query requires an index") || error.message.includes("No matching")) {
-         // Retry without sort and we'll sort in JS, or just show raw
-         const fallbackQ = query(collection(db, 'users', user.uid, 'children'));
-         onSnapshot(fallbackQ, (snap) => {
-            const d = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Sort in JS if 'order' exists, else by createdAt
-            d.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || '').localeCompare(b.createdAt || ''));
-            setChildren(d);
-            setDataLoading(false);
-         });
-      } else {
-        console.error("Error fetching children:", error);
-        setFetchError(error.message);
-        setDataLoading(false);
-      }
+      console.error("Error fetching children:", error);
+      setFetchError(error.message);
+      setDataLoading(false);
     });
     return () => unsubscribe();
   }, [user]);
