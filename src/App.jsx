@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
-  X, TrendingUp, List, LogOut, LogIn, Mail, Lock
+  X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -25,6 +25,7 @@ import {
     appId: "1:18259366717:web:5cd2e6239f58b18b9f6b54",
     measurementId: "G-YX9PTFX8G5"
   };
+
 // --- 2. Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -119,9 +120,10 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   
-  // Loading States
+  // Loading & Error States
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   // UI States
   const [viewMode, setViewMode] = useState('timeline');
@@ -150,7 +152,10 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
-      if (!u) setDataLoading(false);
+      if (!u) {
+        setDataLoading(false);
+        setFetchError(null);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -159,13 +164,19 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
+    setFetchError(null);
+    
+    // NOTE: If you get a "Missing or insufficient permissions" error here, 
+    // it means your Firestore Rules (Step 3) are not allowing access to 'users/{uid}'.
     const q = query(collection(db, 'users', user.uid, 'children'));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setChildren(data);
       setDataLoading(false);
     }, (error) => {
       console.error("Error fetching children:", error);
+      setFetchError(error.message);
       setDataLoading(false);
     });
     return () => unsubscribe();
@@ -213,7 +224,6 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      // Basic error formatting
       let msg = "Authentication failed.";
       if (err.code === 'auth/invalid-credential') msg = "Incorrect email or password.";
       if (err.code === 'auth/email-already-in-use') msg = "Email already in use.";
@@ -235,7 +245,6 @@ export default function App() {
   const temperatureData = useMemo(() => currentChildLogs.filter(l => l.type === 'symptom' && l.temperature).map(l => ({ date: l.timestamp, value: l.temperature })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
   const weightData = useMemo(() => currentChildLogs.filter(l => l.type === 'measurement' && l.weight).map(l => ({ date: l.timestamp, value: l.weight })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
 
-  // --- Action Handlers (Same as before) ---
   const handleAddChild = async (e) => {
     e.preventDefault();
     if (!newChildName.trim() || !user) return;
@@ -384,7 +393,27 @@ export default function App() {
     );
   }
 
-  // 3. Onboarding (No Data Found)
+  // 3. Error Screen (Permissions or other errors)
+  if (fetchError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center">
+          <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><AlertCircle size={32} className="text-red-600" /></div>
+          <h1 className="text-xl font-bold text-slate-800 mb-2">Unable to Load Data</h1>
+          <p className="text-slate-500 mb-4">{fetchError}</p>
+          <div className="text-sm bg-slate-50 p-3 rounded-lg text-slate-600 mb-6 text-left">
+            <strong>Tip:</strong> If you see "Missing or insufficient permissions", check Step 3 in the guide. Your database rules might be blocking access.
+          </div>
+          <Button onClick={() => window.location.reload()} className="w-full mb-2">
+            <RefreshCw size={18} /> Reload Page
+          </Button>
+          <button onClick={handleLogout} className="text-slate-400 text-sm hover:text-slate-600">Sign Out</button>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. Onboarding (No Data Found)
   if (children.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -409,7 +438,7 @@ export default function App() {
     );
   }
 
-  // 4. Dashboard
+  // 5. Dashboard
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-0">
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
