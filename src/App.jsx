@@ -51,7 +51,7 @@ import {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);        // <--- The error happens because this line is likely missing!
 const db = getFirestore(app);
-
+const appId = "family-health-v1";
 // --- Components ---
 
 const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button', disabled = false }) => {
