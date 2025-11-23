@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
-  X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw
+  X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw,
+  Utensils, Droplets, Bone, Coffee
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -14,6 +15,7 @@ import {
   doc, onSnapshot, query 
 } from "firebase/firestore";
 
+// --- 1. PASTE YOUR FIREBASE CONFIG HERE ---
   const firebaseConfig = {
     apiKey: "AIzaSyCfjzFY_yZQv66hF_Ob9-wHk1klKBe5rHw",
     authDomain: "nexusenglish-3e9c3.firebaseapp.com",
@@ -40,7 +42,9 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
     secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
     danger: "bg-red-50 text-red-600 hover:bg-red-100",
     ghost: "bg-transparent text-slate-500 hover:bg-slate-100",
-    google: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 w-full"
+    google: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 w-full",
+    outline: "bg-transparent border-2 border-slate-200 text-slate-600 hover:bg-slate-50",
+    activeOutline: "bg-slate-50 border-2 border-indigo-500 text-indigo-700"
   };
   return <button type={type} onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant]} ${className}`}>{children}</button>;
 };
@@ -130,6 +134,7 @@ export default function App() {
   const [isSymptomOpen, setIsSymptomOpen] = useState(false);
   const [isMedicineOpen, setIsMedicineOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isNutritionOpen, setIsNutritionOpen] = useState(false);
 
   // Auth Form States
   const [email, setEmail] = useState('');
@@ -142,7 +147,7 @@ export default function App() {
   const [newProfileType, setNewProfileType] = useState('child');
   const [newHeight, setNewHeight] = useState('');
   const [newWeight, setNewWeight] = useState('');
-  const [logForm, setLogForm] = useState({ temp: '', symptoms: [], note: '', medicineName: '', dosage: '', weight: '', height: '' });
+  const [logForm, setLogForm] = useState({ temp: '', symptoms: [], note: '', medicineName: '', dosage: '', weight: '', height: '', nutritionType: 'food', item: '', amount: '' });
   
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
 
@@ -159,14 +164,13 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Data Fetching Effect (Children)
+  // 2. Data Fetching Effect
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
     setFetchError(null);
     
     const q = query(collection(db, 'users', user.uid, 'children'));
-    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setChildren(data);
@@ -224,7 +228,6 @@ export default function App() {
       let msg = "Authentication failed.";
       if (err.code === 'auth/invalid-credential') msg = "Incorrect email or password.";
       if (err.code === 'auth/email-already-in-use') msg = "Email already in use.";
-      if (err.code === 'auth/weak-password') msg = "Password should be at least 6 chars.";
       setAuthError(msg);
     }
   };
@@ -242,6 +245,7 @@ export default function App() {
   const temperatureData = useMemo(() => currentChildLogs.filter(l => l.type === 'symptom' && l.temperature).map(l => ({ date: l.timestamp, value: l.temperature })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
   const weightData = useMemo(() => currentChildLogs.filter(l => l.type === 'measurement' && l.weight).map(l => ({ date: l.timestamp, value: l.weight })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
 
+  // --- Action Handlers ---
   const handleAddChild = async (e) => {
     e.preventDefault();
     if (!newChildName.trim() || !user) return;
@@ -255,10 +259,7 @@ export default function App() {
         });
       }
       setNewChildName(''); setNewProfileType('child'); setNewHeight(''); setNewWeight(''); setIsAddChildOpen(false);
-    } catch (err) { 
-      console.error(err);
-      alert("FAILED TO SAVE: " + err.message + "\n\nPlease check your Firebase Rules in the console.");
-    }
+    } catch (err) { alert("FAILED TO SAVE: " + err.message); }
   };
 
   const handleAddSymptom = async (e) => {
@@ -269,7 +270,7 @@ export default function App() {
         childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note
       });
       setLogForm({ ...logForm, temp: '', symptoms: [], note: '' }); setIsSymptomOpen(false);
-    } catch (err) { console.error(err); alert("Error saving log: " + err.message); }
+    } catch (err) { alert("Error saving log: " + err.message); }
   };
 
   const handleAddMedicine = async (e) => {
@@ -280,7 +281,7 @@ export default function App() {
         childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note
       });
       setLogForm({ ...logForm, medicineName: '', dosage: '', note: '' }); setIsMedicineOpen(false);
-    } catch (err) { console.error(err); alert("Error saving log: " + err.message); }
+    } catch (err) { alert("Error saving log: " + err.message); }
   };
 
   const handleAddStats = async (e) => {
@@ -297,7 +298,18 @@ export default function App() {
         await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates);
       }
       setLogForm({ ...logForm, weight: '', height: '', note: '' }); setIsStatsOpen(false);
-    } catch (err) { console.error(err); alert("Error saving log: " + err.message); }
+    } catch (err) { alert("Error saving log: " + err.message); }
+  };
+
+  const handleAddNutrition = async (e) => {
+    e.preventDefault();
+    if (!user || !selectedChild) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'logs'), {
+        childId: selectedChild.id, type: 'nutrition', timestamp: new Date().toISOString(), nutritionType: logForm.nutritionType, item: logForm.item, amount: logForm.amount, note: logForm.note
+      });
+      setLogForm({ ...logForm, item: '', amount: '', note: '', nutritionType: 'food' }); setIsNutritionOpen(false);
+    } catch (err) { alert("Error saving log: " + err.message); }
   };
 
   const deleteLog = async (logId) => {
@@ -317,83 +329,31 @@ export default function App() {
 
   // --- Views ---
 
-  // 1. Loading Screen
   if (authLoading || (user && dataLoading)) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
-        <Activity className="animate-spin text-indigo-600" size={40} />
-        <p className="text-slate-400 font-medium">Loading your family data...</p>
-      </div>
-    );
+    return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-400 font-medium">Loading...</p></div>;
   }
 
-  // 2. Login Screen
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center">
           <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={32} className="text-indigo-600" /></div>
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Family Health Status</h1>
-          <p className="text-slate-500 mb-8">Log in to track fevers, meds, and growth for your kids and pets across all your devices.</p>
-          
-          <Button onClick={handleGoogleLogin} variant="google" className="mb-6 py-3 border-slate-200 border shadow-sm">
-            <LogIn size={20} /> Sign in with Google
-          </Button>
-
-          <div className="flex items-center gap-4 mb-6">
-            <div className="h-px bg-slate-200 flex-1"></div>
-            <span className="text-slate-400 text-sm">OR</span>
-            <div className="h-px bg-slate-200 flex-1"></div>
-          </div>
-
+          <p className="text-slate-500 mb-8">Log in to track health for your kids and pets.</p>
+          <Button onClick={handleGoogleLogin} variant="google" className="mb-6 py-3 border-slate-200 border shadow-sm"><LogIn size={20} /> Sign in with Google</Button>
+          <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><span className="text-slate-400 text-sm">OR</span><div className="h-px bg-slate-200 flex-1"></div></div>
           <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
             {authError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">{authError}</div>}
-            
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
-                <input 
-                  type="email" 
-                  className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 text-slate-400" size={18} />
-                <input 
-                  type="password" 
-                  className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white">
-              {isSignUp ? "Create Account" : "Log In"}
-            </Button>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><div className="relative"><Mail className="absolute left-3 top-3 text-slate-400" size={18} /><input type="email" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Password</label><div className="relative"><Lock className="absolute left-3 top-3 text-slate-400" size={18} /><input type="password" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div>
+            <Button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white">{isSignUp ? "Create Account" : "Log In"}</Button>
           </form>
-
-          <button 
-            onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
-            className="mt-6 text-indigo-600 text-sm font-medium hover:text-indigo-800"
-          >
-            {isSignUp ? "Already have an account? Log In" : "Need an account? Sign Up"}
-          </button>
+          <button onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }} className="mt-6 text-indigo-600 text-sm font-medium hover:text-indigo-800">{isSignUp ? "Already have an account? Log In" : "Need an account? Sign Up"}</button>
         </div>
       </div>
     );
   }
 
-  // 3. Error Screen (Permissions or other errors)
   if (fetchError) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -401,19 +361,13 @@ export default function App() {
           <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><AlertCircle size={32} className="text-red-600" /></div>
           <h1 className="text-xl font-bold text-slate-800 mb-2">Unable to Load Data</h1>
           <p className="text-slate-500 mb-4">{fetchError}</p>
-          <div className="text-sm bg-slate-50 p-3 rounded-lg text-slate-600 mb-6 text-left">
-            <strong>Tip:</strong> If you see "Missing or insufficient permissions", check Step 3 in the guide. Your database rules might be blocking access.
-          </div>
-          <Button onClick={() => window.location.reload()} className="w-full mb-2">
-            <RefreshCw size={18} /> Reload Page
-          </Button>
+          <Button onClick={() => window.location.reload()} className="w-full mb-2"><RefreshCw size={18} /> Reload Page</Button>
           <button onClick={handleLogout} className="text-slate-400 text-sm hover:text-slate-600">Sign Out</button>
         </div>
       </div>
     );
   }
 
-  // 4. Onboarding (No Data Found)
   if (children.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -422,17 +376,6 @@ export default function App() {
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Welcome!</h1>
           <p className="text-slate-500 mb-8">Let's create your first profile.</p>
           <Button onClick={() => setIsAddChildOpen(true)} className="w-full mb-4">Create First Profile</Button>
-          
-          {/* Debug Info for Troubleshooting */}
-          <div className="border-t border-slate-100 pt-4 mt-4 text-left">
-            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Debug Info</p>
-            <div className="bg-slate-50 p-2 rounded text-xs text-slate-500 font-mono overflow-hidden text-ellipsis">
-              <div className="mb-1">Logged in as: <span className="text-slate-800">{user.email}</span></div>
-              <div className="mb-1">User ID: <span className="text-slate-800">{user.uid.slice(0, 8)}...</span></div>
-              <div>Saving to: users/{user.uid.slice(0, 8)}.../children</div>
-            </div>
-          </div>
-
           <button onClick={handleLogout} className="text-slate-400 text-sm hover:text-slate-600 mt-6">Sign Out</button>
         </div>
         <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
@@ -449,7 +392,6 @@ export default function App() {
     );
   }
 
-  // 5. Dashboard
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-0">
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
@@ -483,11 +425,15 @@ export default function App() {
             </div>
           )}
         </div>
-        <div className="px-6 -mt-8 z-20 grid grid-cols-3 gap-3">
-          <button onClick={() => setIsSymptomOpen(true)} className="bg-white p-3 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex flex-col items-center justify-center gap-2 hover:-translate-y-1 transition-transform"><div className="p-2.5 bg-red-50 text-red-500 rounded-full"><Thermometer size={20} /></div><span className="text-xs font-bold text-slate-600">Symptom</span></button>
-          <button onClick={() => setIsMedicineOpen(true)} className="bg-white p-3 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex flex-col items-center justify-center gap-2 hover:-translate-y-1 transition-transform"><div className="p-2.5 bg-blue-50 text-blue-500 rounded-full"><Pill size={20} /></div><span className="text-xs font-bold text-slate-600">Meds</span></button>
-          <button onClick={() => setIsStatsOpen(true)} className="bg-white p-3 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex flex-col items-center justify-center gap-2 hover:-translate-y-1 transition-transform"><div className="p-2.5 bg-emerald-50 text-emerald-500 rounded-full"><Weight size={20} /></div><span className="text-xs font-bold text-slate-600">Log Stats</span></button>
+        
+        {/* Updated Grid - 2x2 Layout */}
+        <div className="px-6 -mt-8 z-20 grid grid-cols-2 gap-3">
+          <button onClick={() => setIsSymptomOpen(true)} className="bg-white p-4 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex items-center justify-center gap-3 hover:-translate-y-1 transition-transform"><div className="p-2 bg-red-50 text-red-500 rounded-full"><Thermometer size={20} /></div><span className="text-sm font-bold text-slate-600">Symptom</span></button>
+          <button onClick={() => setIsMedicineOpen(true)} className="bg-white p-4 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex items-center justify-center gap-3 hover:-translate-y-1 transition-transform"><div className="p-2 bg-blue-50 text-blue-500 rounded-full"><Pill size={20} /></div><span className="text-sm font-bold text-slate-600">Meds</span></button>
+          <button onClick={() => setIsNutritionOpen(true)} className="bg-white p-4 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex items-center justify-center gap-3 hover:-translate-y-1 transition-transform"><div className="p-2 bg-orange-50 text-orange-500 rounded-full">{isPet ? <Bone size={20} /> : <Utensils size={20} />}</div><span className="text-sm font-bold text-slate-600">Nutrition</span></button>
+          <button onClick={() => setIsStatsOpen(true)} className="bg-white p-4 rounded-2xl shadow-lg shadow-slate-200 border border-slate-50 flex items-center justify-center gap-3 hover:-translate-y-1 transition-transform"><div className="p-2 bg-emerald-50 text-emerald-500 rounded-full"><Weight size={20} /></div><span className="text-sm font-bold text-slate-600">Growth</span></button>
         </div>
+
         <div className="px-6 mt-6 mb-2">
            <div className="bg-slate-100 p-1 rounded-xl flex">
              <button onClick={() => setViewMode('timeline')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'timeline' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}><List size={16} /> Timeline</button>
@@ -500,11 +446,12 @@ export default function App() {
               {currentChildLogs.length === 0 && <div className="text-center py-10 opacity-40"><StickyNote size={40} className="mx-auto mb-2 text-slate-300" /><p className="text-sm">No logs yet for {selectedChild?.name}</p></div>}
               {currentChildLogs.map((log) => (
                 <div key={log.id} className="relative pl-4 border-l-2 border-slate-200/60 pb-1">
-                  <div className={`absolute -left-[7px] top-4 w-3 h-3 rounded-full border-2 border-slate-50 shadow-sm ${log.type === 'medicine' ? 'bg-blue-500' : log.type === 'measurement' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  <div className={`absolute -left-[7px] top-4 w-3 h-3 rounded-full border-2 border-slate-50 shadow-sm ${log.type === 'medicine' ? 'bg-blue-500' : log.type === 'measurement' ? 'bg-emerald-500' : log.type === 'nutrition' ? 'bg-orange-500' : 'bg-red-500'}`} />
                   <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold uppercase tracking-wider text-slate-400">{log.type} &bull; {formatDate(log.timestamp)} {formatTime(log.timestamp)}</span><button onClick={() => deleteLog(log.id)} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button></div>
                     {log.type === 'symptom' && <div className="flex items-start gap-3">{log.temperature && <div className="text-2xl font-bold text-slate-700">{log.temperature}°</div>}<div className="flex flex-wrap gap-1">{log.symptoms?.map(s => <span key={s} className="px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded-md font-medium">{s}</span>)}</div></div>}
                     {log.type === 'medicine' && <div><div className="font-bold text-slate-700 text-lg">{log.medicineName}</div><div className="text-slate-500 text-sm">{log.dosage}</div></div>}
+                    {log.type === 'nutrition' && <div className="flex items-center gap-3"><div className="p-2 bg-orange-50 text-orange-600 rounded-full">{log.nutritionType === 'liquid' || log.nutritionType === 'water' ? <Droplets size={20} /> : isPet ? <Bone size={20} /> : <Utensils size={20} />}</div><div><div className="font-bold text-slate-700">{log.item || (log.nutritionType === 'water' ? 'Water Refill' : 'Meal')}</div>{log.amount && <div className="text-slate-500 text-sm">{log.amount}</div>}</div></div>}
                     {log.type === 'measurement' && <div className="flex gap-4">{log.weight && <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold">Weight: {log.weight}</div>}{log.height && <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold">Height: {log.height}</div>}</div>}
                     {log.note && <div className="mt-2 text-sm text-slate-500 italic bg-slate-50 p-2 rounded-lg">"{log.note}"</div>}
                   </div>
@@ -524,6 +471,25 @@ export default function App() {
             <Button type="submit" className="w-full" disabled={!newChildName.trim()} variant={newProfileType}>Save Profile</Button>
          </form>
       </Modal>
+      
+      <Modal isOpen={isNutritionOpen} onClose={() => setIsNutritionOpen(false)} title={isPet ? "Log Pet Nutrition" : "Log Child Nutrition"}>
+        <form onSubmit={handleAddNutrition} className="space-y-4">
+          <div className="flex gap-4 mb-2">
+             <button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'food'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${logForm.nutritionType === 'food' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+               {isPet ? <Bone size={24} /> : <Utensils size={24} />}
+               <span className="font-medium">{isPet ? 'Food' : 'Meal'}</span>
+             </button>
+             <button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'liquid'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${logForm.nutritionType === 'liquid' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+               <Droplets size={24} />
+               <span className="font-medium">{isPet ? 'Water' : 'Liquid'}</span>
+             </button>
+          </div>
+          <div><label className="block text-sm font-medium text-slate-700 mb-1">{isPet ? (logForm.nutritionType === 'food' ? 'Food Brand/Type' : 'Action') : (logForm.nutritionType === 'food' ? 'Meal Description' : 'Drink Type')}</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" placeholder={isPet ? (logForm.nutritionType === 'food' ? "e.g. Dry Kibble" : "e.g. Refilled Bowl") : (logForm.nutritionType === 'food' ? "e.g. Chicken & Rice" : "e.g. Apple Juice")} value={logForm.item} onChange={(e) => setLogForm({...logForm, item: e.target.value})} /></div>
+          <div><label className="block text-sm font-medium text-slate-700 mb-1">Amount (Optional)</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" placeholder={isPet ? "e.g. 1 cup" : "e.g. 200ml / half portion"} value={logForm.amount} onChange={(e) => setLogForm({...logForm, amount: e.target.value})} /></div>
+          <Button type="submit" className="w-full bg-orange-600 shadow-orange-200 hover:bg-orange-700">Log Nutrition</Button>
+        </form>
+      </Modal>
+
       <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth & Stats"><form onSubmit={handleAddStats} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Current Weight</label><input autoFocus type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={logForm.weight} onChange={(e) => setLogForm({...logForm, weight: e.target.value})} placeholder="e.g. 20.5" /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Current Height</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={logForm.height} onChange={(e) => setLogForm({...logForm, height: e.target.value})} placeholder="e.g. 110 cm" /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Note</label><textarea rows="2" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none" value={logForm.note} onChange={(e) => setLogForm({...logForm, note: e.target.value})} placeholder="Optional note..." /></div><Button type="submit" className="w-full bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700">Save Measurement</Button></form></Modal>
       <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms"><form onSubmit={handleAddSymptom} className="space-y-6"><div><label className="block text-sm font-medium text-slate-700 mb-2">Temperature</label><div className="flex gap-2"><input type="number" step="0.1" placeholder="0.0" className="flex-1 p-4 text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" value={logForm.temp} onChange={(e) => setLogForm({ ...logForm, temp: e.target.value })} /><div className="flex items-center justify-center bg-slate-100 w-16 rounded-xl text-slate-500 font-bold">°</div></div></div><div><label className="block text-sm font-medium text-slate-700 mb-2">Symptoms</label><div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm transition-colors border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600 font-medium' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{sym}</button>))}</div></div><div><label className="block text-sm font-medium text-slate-700 mb-2">Notes</label><textarea rows="2" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none" placeholder="Any specific details..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /></div><Button type="submit" className="w-full" variant={selectedChild?.type === 'pet' ? 'pet' : 'child'}>Save Entry</Button></form></Modal>
       <Modal isOpen={isMedicineOpen} onClose={() => setIsMedicineOpen(false)} title="Log Medicine"><form onSubmit={handleAddMedicine} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Medicine Name</label><input type="text" autoFocus className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Ibuprofen" value={logForm.medicineName} onChange={(e) => setLogForm({ ...logForm, medicineName: e.target.value })} /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Dosage</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 5ml" value={logForm.dosage} onChange={(e) => setLogForm({ ...logForm, dosage: e.target.value })} /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Notes</label><textarea rows="2" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Instructions..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /></div><Button type="submit" className="w-full bg-blue-600 shadow-blue-200 hover:bg-blue-700" disabled={!logForm.medicineName}>Log Medicine</Button></form></Modal>
