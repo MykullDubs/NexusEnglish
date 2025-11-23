@@ -17,9 +17,10 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: '[https://cdn-icons-png.flaticon.com/512/3063/3063822.png](https://cdn-icons-png.flaticon.com/512/3063/3063822.png)', // Placeholder icon
+            src: '/pwa-512x512.png', // <--- Updated to point to your local file
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }
