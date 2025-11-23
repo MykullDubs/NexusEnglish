@@ -15,7 +15,7 @@ import {
   getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, getDoc,
   doc, onSnapshot, query, orderBy, writeBatch
 } from "firebase/firestore";
-import { Reorder } from "framer-motion";
+import { Reorder, useDragControls } from "framer-motion";
 
 // --- 1. PASTE YOUR FIREBASE CONFIG HERE ---
   const firebaseConfig = {
@@ -34,7 +34,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- Components ---
+// --- Sub-Components ---
+
 const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button', disabled = false }) => {
   const baseStyle = "px-4 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed";
   const variants = {
@@ -119,6 +120,34 @@ const SimpleLineChart = ({ data, colorHex, unit, title }) => {
   );
 };
 
+// New Component for Draggable Profile Item
+const ProfileItem = ({ child, isSelected, onClick }) => {
+  const controls = useDragControls();
+  const isPet = child.type === 'pet';
+
+  return (
+    <Reorder.Item 
+      value={child} 
+      dragListener={false} // Disables dragging on the whole item
+      dragControls={controls} // Connects to the specific handle
+      className="flex-shrink-0 snap-start"
+    >
+      <div className={`flex items-center pl-4 pr-2 py-2 rounded-full transition-all border select-none ${isSelected ? `bg-white ${isPet ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}>
+        <button onClick={onClick} className="flex items-center gap-2 mr-2">
+          {isPet ? <PawPrint size={14} /> : <Baby size={14} />}
+          {child.name}
+        </button>
+        <div 
+          onPointerDown={(e) => controls.start(e)} 
+          className="cursor-grab touch-none pl-2 border-l border-current/20 opacity-60 hover:opacity-100 active:cursor-grabbing py-1"
+        >
+          <GripHorizontal size={14} />
+        </div>
+      </div>
+    </Reorder.Item>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [children, setChildren] = useState([]);
@@ -193,25 +222,20 @@ export default function App() {
     fetchSettings();
   }, [user]);
 
-  // FIX: Removed orderBy so it finds profiles even if they are missing the 'order' field
+  // Fetch Data with Sort Fallback
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
     setFetchError(null);
     
-    // We fetch ALL children first
     const q = query(collection(db, 'users', user.uid, 'children'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Then we sort them manually in JavaScript
-      // This allows old profiles (no 'order') to show up alongside new ones
+      // Sort in JS: 'order' first, then createdAt
       data.sort((a, b) => {
-        // Default order to 9999 so new items (with order) might float to top, or swap logic as preferred
         const orderA = a.order ?? 9999; 
         const orderB = b.order ?? 9999;
         if (orderA !== orderB) return orderA - orderB;
-        // Fallback to creation date
         return (a.createdAt || '').localeCompare(b.createdAt || '');
       });
 
@@ -245,9 +269,8 @@ export default function App() {
 
   // --- Handlers ---
   const handleReorder = async (newOrder) => {
-    setChildren(newOrder); // Optimistic UI update
+    setChildren(newOrder); 
     if (!user) return;
-    
     try {
       const batch = writeBatch(db);
       newOrder.forEach((child, index) => {
@@ -255,9 +278,7 @@ export default function App() {
         batch.update(ref, { order: index });
       });
       await batch.commit();
-    } catch (e) {
-      console.error("Reorder save failed", e);
-    }
+    } catch (e) { console.error("Reorder save failed", e); }
   };
 
   const handleSaveSettings = async (newSettings) => {
@@ -267,7 +288,7 @@ export default function App() {
     }
   };
 
-  // ... (Simplified handlers for brevity - same logic as before)
+  // Simplified Handlers
   const handleAddChild = async (e) => { e.preventDefault(); if(!newChildName.trim()||!user)return; try{ const order = children.length; const docRef = await addDoc(collection(db,'users',user.uid,'children'),{name:newChildName,type:newProfileType,height:newHeight,weight:newWeight,order,createdAt:new Date().toISOString()}); if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{childId:docRef.id,type:'measurement',timestamp:new Date().toISOString(),height:newHeight,weight:newWeight,note:'Initial Profile'}); setNewChildName('');setNewProfileType('child');setNewHeight('');setNewWeight('');setIsAddChildOpen(false); }catch(err){alert("Save Failed: "+err.message);} };
   const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   const moveWidget = (index, direction) => { const newOrder = [...settings.dashboardOrder]; const item = newOrder[index]; newOrder.splice(index, 1); if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
@@ -290,12 +311,11 @@ export default function App() {
   const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // --- Views (Loading / Auth / Error - same as before) ---
+  // --- Views ---
   if (authLoading || (user && dataLoading)) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-400 font-medium">Loading...</p></div>;
   if (!user) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6"><div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center"><div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={32} className="text-indigo-600" /></div><h1 className="text-2xl font-bold text-slate-800 mb-2">Family Health Status</h1><Button onClick={handleGoogleLogin} variant="google" className="mb-6 py-3 border-slate-200 border shadow-sm"><LogIn size={20} /> Sign in with Google</Button><form onSubmit={handleEmailAuth} className="space-y-4 text-left">{authError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center">{authError}</div>}<div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><div className="relative"><Mail className="absolute left-3 top-3 text-slate-400" size={18} /><input type="email" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Password</label><div className="relative"><Lock className="absolute left-3 top-3 text-slate-400" size={18} /><input type="password" className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div><Button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white">{isSignUp ? "Create Account" : "Log In"}</Button></form><button onClick={() => setIsSignUp(!isSignUp)} className="mt-6 text-indigo-600 text-sm font-medium hover:text-indigo-800">{isSignUp ? "Log In" : "Sign Up"}</button></div></div>;
   if (fetchError) return <div className="p-6 text-center"><h1 className="text-red-600 font-bold">Error</h1><p>{fetchError}</p><Button onClick={() => window.location.reload()}>Retry</Button></div>;
 
-  // --- Onboarding ---
   if (children.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -316,12 +336,11 @@ export default function App() {
     );
   }
 
-  // --- Main Dashboard ---
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-0">
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
         
-        {/* Header with Draggable Profiles */}
+        {/* Header with Locked Reorder List */}
         <div className={`${themeBg} p-6 pb-8 text-white rounded-b-[2.5rem] shadow-lg z-10 transition-colors duration-500`}>
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-lg font-bold flex items-center gap-2 opacity-90"><Activity size={20} /> Family Health</h1>
@@ -331,7 +350,6 @@ export default function App() {
             </div>
           </div>
           
-          {/* Draggable Reorder List */}
           <Reorder.Group 
             axis="x" 
             values={children} 
@@ -339,14 +357,12 @@ export default function App() {
             className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x"
           >
             {children.map(child => (
-              <Reorder.Item key={child.id} value={child} className="flex-shrink-0 snap-start">
-                <button 
-                  onClick={() => setSelectedChild(child)}
-                  className={`px-4 py-2 rounded-full flex items-center gap-2 transition-all border select-none ${selectedChild?.id === child.id ? `bg-white ${child.type === 'pet' ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}
-                >
-                  {child.type === 'pet' ? <PawPrint size={14} /> : <Baby size={14} />}{child.name}
-                </button>
-              </Reorder.Item>
+              <ProfileItem 
+                key={child.id} 
+                child={child}
+                isSelected={selectedChild?.id === child.id}
+                onClick={() => setSelectedChild(child)}
+              />
             ))}
           </Reorder.Group>
 
