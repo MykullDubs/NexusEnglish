@@ -14,7 +14,6 @@ import {
   doc, onSnapshot, query 
 } from "firebase/firestore";
 
-// --- 1. PASTE YOUR FIREBASE CONFIG HERE ---
   const firebaseConfig = {
     apiKey: "AIzaSyCfjzFY_yZQv66hF_Ob9-wHk1klKBe5rHw",
     authDomain: "nexusenglish-3e9c3.firebaseapp.com",
@@ -166,8 +165,6 @@ export default function App() {
     setDataLoading(true);
     setFetchError(null);
     
-    // NOTE: If you get a "Missing or insufficient permissions" error here, 
-    // it means your Firestore Rules (Step 3) are not allowing access to 'users/{uid}'.
     const q = query(collection(db, 'users', user.uid, 'children'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -258,7 +255,10 @@ export default function App() {
         });
       }
       setNewChildName(''); setNewProfileType('child'); setNewHeight(''); setNewWeight(''); setIsAddChildOpen(false);
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error(err);
+      alert("FAILED TO SAVE: " + err.message + "\n\nPlease check your Firebase Rules in the console.");
+    }
   };
 
   const handleAddSymptom = async (e) => {
@@ -269,7 +269,7 @@ export default function App() {
         childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note
       });
       setLogForm({ ...logForm, temp: '', symptoms: [], note: '' }); setIsSymptomOpen(false);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); alert("Error saving log: " + err.message); }
   };
 
   const handleAddMedicine = async (e) => {
@@ -280,7 +280,7 @@ export default function App() {
         childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note
       });
       setLogForm({ ...logForm, medicineName: '', dosage: '', note: '' }); setIsMedicineOpen(false);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); alert("Error saving log: " + err.message); }
   };
 
   const handleAddStats = async (e) => {
@@ -297,7 +297,7 @@ export default function App() {
         await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates);
       }
       setLogForm({ ...logForm, weight: '', height: '', note: '' }); setIsStatsOpen(false);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); alert("Error saving log: " + err.message); }
   };
 
   const deleteLog = async (logId) => {
@@ -422,7 +422,18 @@ export default function App() {
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Welcome!</h1>
           <p className="text-slate-500 mb-8">Let's create your first profile.</p>
           <Button onClick={() => setIsAddChildOpen(true)} className="w-full mb-4">Create First Profile</Button>
-          <button onClick={handleLogout} className="text-slate-400 text-sm hover:text-slate-600">Sign Out</button>
+          
+          {/* Debug Info for Troubleshooting */}
+          <div className="border-t border-slate-100 pt-4 mt-4 text-left">
+            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Debug Info</p>
+            <div className="bg-slate-50 p-2 rounded text-xs text-slate-500 font-mono overflow-hidden text-ellipsis">
+              <div className="mb-1">Logged in as: <span className="text-slate-800">{user.email}</span></div>
+              <div className="mb-1">User ID: <span className="text-slate-800">{user.uid.slice(0, 8)}...</span></div>
+              <div>Saving to: users/{user.uid.slice(0, 8)}.../children</div>
+            </div>
+          </div>
+
+          <button onClick={handleLogout} className="text-slate-400 text-sm hover:text-slate-600 mt-6">Sign Out</button>
         </div>
         <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
           <form onSubmit={handleAddChild} className="space-y-4">
@@ -508,7 +519,7 @@ export default function App() {
       <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
          <form onSubmit={handleAddChild} className="space-y-4">
             <div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}><Baby size={24} /> <span className="font-medium">Child</span></button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}><PawPrint size={24} /> <span className="font-medium">Pet</span></button></div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">Name</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder={newProfileType === 'child' ? "e.g. Sarah" : "e.g. Buddy"} /></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Name</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" /></div>
             <div className="grid grid-cols-2 gap-4"><div><label className="text-sm font-medium text-slate-700">Height</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newHeight} onChange={(e) => setNewHeight(e.target.value)} placeholder="e.g. 100cm" /></div><div><label className="text-sm font-medium text-slate-700">Weight</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="e.g. 18kg" /></div></div>
             <Button type="submit" className="w-full" disabled={!newChildName.trim()} variant={newProfileType}>Save Profile</Button>
          </form>
