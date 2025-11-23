@@ -2,27 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
-  X, TrendingUp, List, LogOut, LogIn
+  X, TrendingUp, List, LogOut, LogIn 
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken,
-  onAuthStateChanged 
+  getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
 } from "firebase/auth";
 import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  deleteDoc, 
-  updateDoc,
-  doc, 
-  onSnapshot, 
-  query 
+  getFirestore, collection, addDoc, deleteDoc, updateDoc,
+  doc, onSnapshot, query 
 } from "firebase/firestore";
 
-// --- Firebase Configuration & Init ---
   const firebaseConfig = {
     apiKey: "AIzaSyCfjzFY_yZQv66hF_Ob9-wHk1klKBe5rHw",
     authDomain: "nexusenglish-3e9c3.firebaseapp.com",
@@ -34,10 +24,11 @@ import {
     measurementId: "G-YX9PTFX8G5"
   };
 
+// --- 2. Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);        // <--- The error happens because this line is likely missing!
+const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "family-health-v1";
+
 // --- Components ---
 const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button', disabled = false }) => {
   const baseStyle = "px-4 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -126,7 +117,11 @@ export default function App() {
   const [children, setChildren] = useState([]);
   const [logs, setLogs] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
-  const [loading, setLoading] = useState(true);
+  
+  // Loading States
+  const [authLoading, setAuthLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
+
   const [viewMode, setViewMode] = useState('timeline');
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
   const [isSymptomOpen, setIsSymptomOpen] = useState(false);
@@ -139,13 +134,53 @@ export default function App() {
   const [logForm, setLogForm] = useState({ temp: '', symptoms: [], note: '', medicineName: '', dosage: '', weight: '', height: '' });
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
 
+  // 1. Auth Effect
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      setLoading(false);
+      setAuthLoading(false);
+      if (!u) setDataLoading(false); // No user means data loading is "done" (nothing to load)
     });
     return () => unsubscribe();
   }, []);
+
+  // 2. Data Fetching Effect (Children)
+  useEffect(() => {
+    if (!user) return;
+    setDataLoading(true); // Start loading when user is found
+    const q = query(collection(db, 'users', user.uid, 'children'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setChildren(data);
+      setDataLoading(false); // Stop loading once we have data
+    }, (error) => {
+      console.error("Error fetching children:", error);
+      setDataLoading(false);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // 3. Selection Logic Effect
+  useEffect(() => {
+    if (children.length > 0 && !selectedChild) {
+      // Default to first child
+      setSelectedChild(children[0]);
+    } else if (selectedChild && !children.find(c => c.id === selectedChild.id)) {
+      // If selected child was deleted, switch to another or null
+      setSelectedChild(children.length > 0 ? children[0] : null);
+    }
+  }, [children, selectedChild]);
+
+  // 4. Logs Fetching Effect
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'users', user.uid, 'logs'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLogs(data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+    }, (error) => console.error("Error fetching logs:", error));
+    return () => unsubscribe();
+  }, [user]);
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -163,28 +198,6 @@ export default function App() {
     setLogs([]);
     setSelectedChild(null);
   };
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'users', user.uid, 'children'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setChildren(data);
-      if (!selectedChild && data.length > 0) setSelectedChild(data[0]);
-      if (selectedChild && !data.find(c => c.id === selectedChild.id)) setSelectedChild(data.length > 0 ? data[0] : null);
-    }, (error) => console.error(error));
-    return () => unsubscribe();
-  }, [user, selectedChild]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'users', user.uid, 'logs'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLogs(data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-    }, (error) => console.error(error));
-    return () => unsubscribe();
-  }, [user]);
 
   const currentChildLogs = logs.filter(l => l.childId === selectedChild?.id);
   const temperatureData = useMemo(() => currentChildLogs.filter(l => l.type === 'symptom' && l.temperature).map(l => ({ date: l.timestamp, value: l.temperature })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
@@ -260,8 +273,19 @@ export default function App() {
   const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Activity className="animate-spin text-slate-400" /></div>;
+  // --- Views ---
 
+  // 1. Loading Screen
+  if (authLoading || (user && dataLoading)) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
+        <Activity className="animate-spin text-indigo-600" size={40} />
+        <p className="text-slate-400 font-medium">Loading your family data...</p>
+      </div>
+    );
+  }
+
+  // 2. Login Screen
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -277,6 +301,7 @@ export default function App() {
     );
   }
 
+  // 3. Onboarding (No Data Found)
   if (children.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -301,6 +326,7 @@ export default function App() {
     );
   }
 
+  // 4. Dashboard
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-0">
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
