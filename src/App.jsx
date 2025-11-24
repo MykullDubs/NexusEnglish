@@ -4,7 +4,7 @@ import {
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
   X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw,
   Utensils, Droplets, Bone, Coffee, Settings, ArrowUp, ArrowDown, 
-  Eye, EyeOff, Download, Save, GripHorizontal
+  Eye, EyeOff, Download, Save, GripHorizontal, Droplet
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -29,13 +29,13 @@ import { Reorder, useDragControls } from "framer-motion";
     measurementId: "G-YX9PTFX8G5"
   };
 
+
 // --- 2. Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- Sub-Components ---
-
+// --- Components ---
 const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button', disabled = false }) => {
   const baseStyle = "px-4 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed";
   const variants = {
@@ -120,7 +120,6 @@ const SimpleLineChart = ({ data, colorHex, unit, title }) => {
   );
 };
 
-// New Component for Draggable Profile Item
 const ProfileItem = ({ child, isSelected, onClick }) => {
   const controls = useDragControls();
   const isPet = child.type === 'pet';
@@ -128,8 +127,8 @@ const ProfileItem = ({ child, isSelected, onClick }) => {
   return (
     <Reorder.Item 
       value={child} 
-      dragListener={false} // Disables dragging on the whole item
-      dragControls={controls} // Connects to the specific handle
+      dragListener={false} 
+      dragControls={controls} 
       className="flex-shrink-0 snap-start"
     >
       <div className={`flex items-center pl-4 pr-2 py-2 rounded-full transition-all border select-none ${isSelected ? `bg-white ${isPet ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}>
@@ -137,10 +136,7 @@ const ProfileItem = ({ child, isSelected, onClick }) => {
           {isPet ? <PawPrint size={14} /> : <Baby size={14} />}
           {child.name}
         </button>
-        <div 
-          onPointerDown={(e) => controls.start(e)} 
-          className="cursor-grab touch-none pl-2 border-l border-current/20 opacity-60 hover:opacity-100 active:cursor-grabbing py-1"
-        >
+        <div onPointerDown={(e) => controls.start(e)} className="cursor-grab touch-none pl-2 border-l border-current/20 opacity-60 hover:opacity-100 active:cursor-grabbing py-1">
           <GripHorizontal size={14} />
         </div>
       </div>
@@ -153,12 +149,8 @@ export default function App() {
   const [children, setChildren] = useState([]);
   const [logs, setLogs] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
-  
-  // App Settings State
   const [settings, setSettings] = useState({
-    tempUnit: 'C', 
-    weightUnit: 'kg', 
-    heightUnit: 'cm', 
+    tempUnit: 'C', weightUnit: 'kg', heightUnit: 'cm', 
     dashboardOrder: [
       { id: 'symptom', visible: true, label: 'Symptom' },
       { id: 'medicine', visible: true, label: 'Medicine' },
@@ -167,12 +159,10 @@ export default function App() {
     ]
   });
 
-  // Loading & Error States
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
 
-  // UI States
   const [viewMode, setViewMode] = useState('timeline');
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
   const [isSymptomOpen, setIsSymptomOpen] = useState(false);
@@ -181,17 +171,17 @@ export default function App() {
   const [isNutritionOpen, setIsNutritionOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Auth Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  // Data Form States
   const [newChildName, setNewChildName] = useState('');
   const [newProfileType, setNewProfileType] = useState('child');
   const [newHeight, setNewHeight] = useState('');
   const [newWeight, setNewWeight] = useState('');
+  const [newDOB, setNewDOB] = useState('');
+  const [newBloodType, setNewBloodType] = useState('');
   const [logForm, setLogForm] = useState({ temp: '', symptoms: [], note: '', medicineName: '', dosage: '', weight: '', height: '', nutritionType: 'food', item: '', amount: '' });
   
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
@@ -200,10 +190,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
-      if (!u) {
-        setDataLoading(false);
-        setFetchError(null);
-      }
+      if (!u) { setDataLoading(false); setFetchError(null); }
     });
     return () => unsubscribe();
   }, []);
@@ -214,31 +201,25 @@ export default function App() {
       try {
         const docRef = doc(db, 'users', user.uid, 'settings', 'config');
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setSettings(prev => ({ ...prev, ...docSnap.data() }));
-        }
+        if (docSnap.exists()) setSettings(prev => ({ ...prev, ...docSnap.data() }));
       } catch (e) { console.error("Settings fetch error", e); }
     };
     fetchSettings();
   }, [user]);
 
-  // Fetch Data with Sort Fallback
   useEffect(() => {
     if (!user) return;
     setDataLoading(true);
     setFetchError(null);
-    
     const q = query(collection(db, 'users', user.uid, 'children'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Sort in JS: 'order' first, then createdAt
       data.sort((a, b) => {
         const orderA = a.order ?? 9999; 
         const orderB = b.order ?? 9999;
         if (orderA !== orderB) return orderA - orderB;
         return (a.createdAt || '').localeCompare(b.createdAt || '');
       });
-
       setChildren(data);
       setDataLoading(false);
     }, (error) => {
@@ -250,11 +231,8 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (children.length > 0 && !selectedChild) {
-      setSelectedChild(children[0]);
-    } else if (selectedChild && !children.find(c => c.id === selectedChild.id)) {
-      setSelectedChild(children.length > 0 ? children[0] : null);
-    }
+    if (children.length > 0 && !selectedChild) setSelectedChild(children[0]);
+    else if (selectedChild && !children.find(c => c.id === selectedChild.id)) setSelectedChild(children.length > 0 ? children[0] : null);
   }, [children, selectedChild]);
 
   useEffect(() => {
@@ -267,7 +245,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- Handlers ---
   const handleReorder = async (newOrder) => {
     setChildren(newOrder); 
     if (!user) return;
@@ -283,19 +260,29 @@ export default function App() {
 
   const handleSaveSettings = async (newSettings) => {
     setSettings(newSettings);
-    if (user) {
-      try { await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings); } catch (e) { console.error("Error saving settings", e); }
-    }
+    if (user) { try { await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings); } catch (e) { console.error("Error saving settings", e); } }
   };
 
-  // Simplified Handlers
-  const handleAddChild = async (e) => { e.preventDefault(); if(!newChildName.trim()||!user)return; try{ const order = children.length; const docRef = await addDoc(collection(db,'users',user.uid,'children'),{name:newChildName,type:newProfileType,height:newHeight,weight:newWeight,order,createdAt:new Date().toISOString()}); if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{childId:docRef.id,type:'measurement',timestamp:new Date().toISOString(),height:newHeight,weight:newWeight,note:'Initial Profile'}); setNewChildName('');setNewProfileType('child');setNewHeight('');setNewWeight('');setIsAddChildOpen(false); }catch(err){alert("Save Failed: "+err.message);} };
+  const handleAddChild = async (e) => { 
+    e.preventDefault(); 
+    if(!newChildName.trim()||!user)return; 
+    try { 
+      const order = children.length; 
+      const docRef = await addDoc(collection(db,'users',user.uid,'children'),{
+        name:newChildName, type:newProfileType, height:newHeight, weight:newWeight, dob:newDOB, bloodType:newBloodType, order, createdAt:new Date().toISOString()
+      }); 
+      if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{childId:docRef.id,type:'measurement',timestamp:new Date().toISOString(),height:newHeight,weight:newWeight,note:'Initial Profile'}); 
+      setNewChildName('');setNewProfileType('child');setNewHeight('');setNewWeight('');setNewDOB('');setNewBloodType('');setIsAddChildOpen(false); 
+    } catch(err){alert("Save Failed: "+err.message);} 
+  };
+
   const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   const moveWidget = (index, direction) => { const newOrder = [...settings.dashboardOrder]; const item = newOrder[index]; newOrder.splice(index, 1); if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   const handleExportData = () => { const dataStr = JSON.stringify({ children, logs, settings }, null, 2); const blob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `family-health-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); };
   const handleGoogleLogin = async () => { const provider = new GoogleAuthProvider(); try { await signInWithPopup(auth, provider); } catch (error) { setAuthError("Google sign in failed."); } };
   const handleEmailAuth = async (e) => { e.preventDefault(); setAuthError(''); if (!email || !password) return; try { if (isSignUp) await createUserWithEmailAndPassword(auth, email, password); else await signInWithEmailAndPassword(auth, email, password); } catch (err) { setAuthError("Authentication failed. Check email/password."); } };
   const handleLogout = async () => { await signOut(auth); setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword(''); };
+  
   const handleAddSymptom = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note }); setLogForm({...logForm, temp: '', symptoms: [], note: ''}); setIsSymptomOpen(false); };
   const handleAddMedicine = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note }); setLogForm({...logForm, medicineName: '', dosage: '', note: ''}); setIsMedicineOpen(false); };
   const handleAddStats = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'measurement', timestamp: new Date().toISOString(), weight: logForm.weight, height: logForm.height, note: logForm.note }); const updates = {}; if(logForm.weight) updates.weight = logForm.weight; if(logForm.height) updates.height = logForm.height; if(Object.keys(updates).length>0) await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates); setLogForm({...logForm, weight: '', height: '', note: ''}); setIsStatsOpen(false); };
@@ -310,6 +297,19 @@ export default function App() {
   const weightData = useMemo(() => currentChildLogs.filter(l => l.type === 'measurement' && l.weight).map(l => ({ date: l.timestamp, value: l.weight })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
   const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  
+  const getAge = (dob) => {
+    if (!dob) return '';
+    const today = new Date();
+    const birthDate = new Date(dob);
+    let years = today.getFullYear() - birthDate.getFullYear();
+    let months = today.getMonth() - birthDate.getMonth();
+    if (months < 0 || (months === 0 && today.getDate() < birthDate.getDate())) {
+        years--;
+        months += 12;
+    }
+    return years > 0 ? `${years}y ${months}m` : `${months}m`;
+  };
 
   // --- Views ---
   if (authLoading || (user && dataLoading)) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-400 font-medium">Loading...</p></div>;
@@ -340,7 +340,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-0">
       <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden flex flex-col relative">
         
-        {/* Header with Locked Reorder List */}
+        {/* Header */}
         <div className={`${themeBg} p-6 pb-8 text-white rounded-b-[2.5rem] shadow-lg z-10 transition-colors duration-500`}>
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-lg font-bold flex items-center gap-2 opacity-90"><Activity size={20} /> Family Health</h1>
@@ -350,28 +350,24 @@ export default function App() {
             </div>
           </div>
           
-          <Reorder.Group 
-            axis="x" 
-            values={children} 
-            onReorder={handleReorder} 
-            className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x"
-          >
-            {children.map(child => (
-              <ProfileItem 
-                key={child.id} 
-                child={child}
-                isSelected={selectedChild?.id === child.id}
-                onClick={() => setSelectedChild(child)}
-              />
-            ))}
+          <Reorder.Group axis="x" values={children} onReorder={handleReorder} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
+            {children.map(child => (<ProfileItem key={child.id} child={child} isSelected={selectedChild?.id === child.id} onClick={() => setSelectedChild(child)} />))}
           </Reorder.Group>
 
           {selectedChild && (
-            <div className="flex justify-between items-center mt-2">
-              <div className="flex items-center gap-4 text-sm text-white/90 bg-black/10 px-4 py-2 rounded-xl backdrop-blur-md">
-                {selectedChild.height && <div className="flex items-center gap-1.5"><Ruler size={14} /><span>{selectedChild.height} {settings.heightUnit}</span></div>}
-                {selectedChild.weight && <div className="flex items-center gap-1.5"><Weight size={14} /><span>{selectedChild.weight} {settings.weightUnit}</span></div>}
-              </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/90">
+              {(selectedChild.height || selectedChild.weight) && (
+                <div className="flex items-center gap-3 bg-black/10 px-3 py-1.5 rounded-xl backdrop-blur-md">
+                  {selectedChild.height && <div className="flex items-center gap-1"><Ruler size={14} /><span>{selectedChild.height} {settings.heightUnit}</span></div>}
+                  {selectedChild.weight && <div className="flex items-center gap-1"><Weight size={14} /><span>{selectedChild.weight} {settings.weightUnit}</span></div>}
+                </div>
+              )}
+              {(selectedChild.dob || selectedChild.bloodType) && (
+                <div className="flex items-center gap-3 bg-black/10 px-3 py-1.5 rounded-xl backdrop-blur-md">
+                  {selectedChild.dob && <div className="flex items-center gap-1"><Calendar size={14} /><span>{getAge(selectedChild.dob)}</span></div>}
+                  {selectedChild.bloodType && <div className="flex items-center gap-1"><Droplet size={14} /><span>{selectedChild.bloodType}</span></div>}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -388,7 +384,7 @@ export default function App() {
           })}
         </div>
 
-        {/* View Toggles & Charts / Timeline (Same as before) */}
+        {/* View Toggles & Charts / Timeline */}
         <div className="px-6 mt-6 mb-2">
            <div className="bg-slate-100 p-1 rounded-xl flex">
              <button onClick={() => setViewMode('timeline')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'timeline' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}><List size={16} /> Timeline</button>
@@ -423,7 +419,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Settings Modal (Same as before) */}
+      {/* Settings Modal */}
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="App Settings">
         <div className="space-y-8">
           <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Units</h4><div className="bg-slate-50 p-4 rounded-2xl space-y-4"><div className="flex justify-between items-center"><span className="font-medium text-slate-700">Temperature</span><div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'C' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.tempUnit === 'C' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>°C</button><button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'F' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.tempUnit === 'F' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>°F</button></div></div><div className="flex justify-between items-center"><span className="font-medium text-slate-700">Weight</span><div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'kg' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.weightUnit === 'kg' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>kg</button><button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'lbs' })} className={`px-4 py-1 rounded-md text-sm transition-all ${settings.weightUnit === 'lbs' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>lbs</button></div></div></div></div>
@@ -432,8 +428,23 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* Other Modals (Add, Stats, Symptom, Medicine, Nutrition - same as previous) */}
-      <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile"><form onSubmit={handleAddChild} className="space-y-4"><div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" /><Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button></form></Modal>
+      {/* Add Profile Modal */}
+      <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
+         <form onSubmit={handleAddChild} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div>
+            <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" />
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Height ({settings.heightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newHeight} onChange={(e) => setNewHeight(e.target.value)} placeholder="e.g. 100" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Weight ({settings.weightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="e.g. 20" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Birthday</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={newDOB} onChange={(e) => setNewDOB(e.target.value)} /></div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Blood Type</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newBloodType} onChange={(e) => setNewBloodType(e.target.value)} placeholder="e.g. O+" /></div>
+            </div>
+            <Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button>
+         </form>
+      </Modal>
+
       <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth"><form onSubmit={handleAddStats} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700">Weight ({settings.weightUnit})</label><input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.weight} onChange={(e) => setLogForm({...logForm, weight: e.target.value})} placeholder={`e.g. 20.5 ${settings.weightUnit}`} /></div><div><label className="block text-sm font-medium text-slate-700">Height ({settings.heightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.height} onChange={(e) => setLogForm({...logForm, height: e.target.value})} placeholder={`e.g. 110 ${settings.heightUnit}`} /></div><Button type="submit" className="w-full">Save</Button></form></Modal>
       <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms"><form onSubmit={handleAddSymptom} className="space-y-6"><div><label className="block text-sm font-medium text-slate-700 mb-2">Temperature (°{settings.tempUnit})</label><div className="flex gap-2"><input type="number" step="0.1" className="flex-1 p-4 text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl" value={logForm.temp} onChange={(e) => setLogForm({ ...logForm, temp: e.target.value })} /><div className="flex items-center justify-center bg-slate-100 w-16 rounded-xl font-bold">°{settings.tempUnit}</div></div></div><div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200'}`}>{sym}</button>))}</div><textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /><Button type="submit" className="w-full">Save</Button></form></Modal>
       <Modal isOpen={isMedicineOpen} onClose={() => setIsMedicineOpen(false)} title="Log Medicine"><form onSubmit={handleAddMedicine} className="space-y-4"><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Medicine Name" value={logForm.medicineName} onChange={(e) => setLogForm({ ...logForm, medicineName: e.target.value })} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Dosage" value={logForm.dosage} onChange={(e) => setLogForm({ ...logForm, dosage: e.target.value })} /><Button type="submit" className="w-full">Log Medicine</Button></form></Modal>
