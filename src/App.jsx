@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
   X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw,
   Utensils, Droplets, Bone, Coffee, Settings, ArrowUp, ArrowDown, 
-  Eye, EyeOff, Download, Save, GripHorizontal, Droplet
+  Eye, EyeOff, Download, Save, GripHorizontal, Droplet, Pencil
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -120,9 +120,20 @@ const SimpleLineChart = ({ data, colorHex, unit, title }) => {
   );
 };
 
-const ProfileItem = ({ child, isSelected, onClick }) => {
+const ProfileItem = ({ child, isSelected, onClick, onEdit }) => {
   const controls = useDragControls();
   const isPet = child.type === 'pet';
+  
+  // Long press logic
+  const timerRef = useRef(null);
+  const handleTouchStart = () => {
+    timerRef.current = setTimeout(() => {
+      onEdit(child);
+    }, 800); // 800ms hold to edit
+  };
+  const handleTouchEnd = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
 
   return (
     <Reorder.Item 
@@ -131,8 +142,19 @@ const ProfileItem = ({ child, isSelected, onClick }) => {
       dragControls={controls} 
       className="flex-shrink-0 snap-start"
     >
-      <div className={`flex items-center pl-4 pr-2 py-2 rounded-full transition-all border select-none ${isSelected ? `bg-white ${isPet ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}>
-        <button onClick={onClick} className="flex items-center gap-2 mr-2">
+      <div 
+        className={`flex items-center pl-4 pr-2 py-2 rounded-full transition-all border select-none ${isSelected ? `bg-white ${isPet ? 'text-amber-600' : 'text-indigo-600'} font-bold shadow-md border-transparent` : 'bg-black/10 text-white/70 border-transparent hover:bg-black/20'}`}
+      >
+        <button 
+          onClick={onClick} 
+          onContextMenu={(e) => { e.preventDefault(); onEdit(child); }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleTouchStart}
+          onMouseUp={handleTouchEnd}
+          onMouseLeave={handleTouchEnd}
+          className="flex items-center gap-2 mr-2"
+        >
           {isPet ? <PawPrint size={14} /> : <Baby size={14} />}
           {child.name}
         </button>
@@ -176,12 +198,15 @@ export default function App() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState('');
 
+  // Profile Form States
+  const [editingChild, setEditingChild] = useState(null); // null = adding, object = editing
   const [newChildName, setNewChildName] = useState('');
   const [newProfileType, setNewProfileType] = useState('child');
   const [newHeight, setNewHeight] = useState('');
   const [newWeight, setNewWeight] = useState('');
   const [newDOB, setNewDOB] = useState('');
   const [newBloodType, setNewBloodType] = useState('');
+  
   const [logForm, setLogForm] = useState({ temp: '', symptoms: [], note: '', medicineName: '', dosage: '', weight: '', height: '', nutritionType: 'food', item: '', amount: '' });
   
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
@@ -263,17 +288,74 @@ export default function App() {
     if (user) { try { await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings); } catch (e) { console.error("Error saving settings", e); } }
   };
 
-  const handleAddChild = async (e) => { 
+  // Prepare modal for adding new child
+  const openAddProfile = () => {
+    setEditingChild(null);
+    setNewChildName('');
+    setNewProfileType('child');
+    setNewHeight('');
+    setNewWeight('');
+    setNewDOB('');
+    setNewBloodType('');
+    setIsAddChildOpen(true);
+  };
+
+  // Prepare modal for editing existing child
+  const openEditProfile = (child) => {
+    setEditingChild(child);
+    setNewChildName(child.name || '');
+    setNewProfileType(child.type || 'child');
+    setNewHeight(child.height || '');
+    setNewWeight(child.weight || '');
+    setNewDOB(child.dob || '');
+    setNewBloodType(child.bloodType || '');
+    setIsAddChildOpen(true);
+  };
+
+  const handleProfileSubmit = async (e) => { 
     e.preventDefault(); 
-    if(!newChildName.trim()||!user)return; 
-    try { 
-      const order = children.length; 
-      const docRef = await addDoc(collection(db,'users',user.uid,'children'),{
-        name:newChildName, type:newProfileType, height:newHeight, weight:newWeight, dob:newDOB, bloodType:newBloodType, order, createdAt:new Date().toISOString()
-      }); 
-      if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{childId:docRef.id,type:'measurement',timestamp:new Date().toISOString(),height:newHeight,weight:newWeight,note:'Initial Profile'}); 
-      setNewChildName('');setNewProfileType('child');setNewHeight('');setNewWeight('');setNewDOB('');setNewBloodType('');setIsAddChildOpen(false); 
+    if(!newChildName.trim()||!user) return; 
+    
+    try {
+      const profileData = {
+        name: newChildName, 
+        type: newProfileType, 
+        height: newHeight, 
+        weight: newWeight, 
+        dob: newDOB, 
+        bloodType: newBloodType
+      };
+
+      if (editingChild) {
+        // Update existing
+        await updateDoc(doc(db, 'users', user.uid, 'children', editingChild.id), profileData);
+      } else {
+        // Create new
+        const order = children.length; 
+        const docRef = await addDoc(collection(db,'users',user.uid,'children'), {
+          ...profileData,
+          order, 
+          createdAt: new Date().toISOString()
+        });
+        // Log initial stats
+        if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{
+          childId:docRef.id, type:'measurement', timestamp:new Date().toISOString(), height:newHeight, weight:newWeight, note:'Initial Profile'
+        });
+      }
+      setIsAddChildOpen(false); 
     } catch(err){alert("Save Failed: "+err.message);} 
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!editingChild || !user) return;
+    if (window.confirm(`Are you sure you want to delete ${editingChild.name}? This cannot be undone.`)) {
+      try {
+        await deleteDoc(doc(db, 'users', user.uid, 'children', editingChild.id));
+        setIsAddChildOpen(false);
+      } catch (err) {
+        alert("Error deleting profile: " + err.message);
+      }
+    }
   };
 
   const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
@@ -322,11 +404,11 @@ export default function App() {
         <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center">
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Welcome!</h1>
           <p className="text-slate-500 mb-8">Create a profile to get started.</p>
-          <Button onClick={() => setIsAddChildOpen(true)} className="w-full">Create First Profile</Button>
+          <Button onClick={openAddProfile} className="w-full">Create First Profile</Button>
           <button onClick={handleLogout} className="mt-6 text-slate-400 text-sm">Sign Out</button>
         </div>
         <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
-          <form onSubmit={handleAddChild} className="space-y-4">
+          <form onSubmit={handleProfileSubmit} className="space-y-4">
              <div className="grid grid-cols-2 gap-4 mb-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div>
              <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" />
              <Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button>
@@ -345,13 +427,21 @@ export default function App() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-lg font-bold flex items-center gap-2 opacity-90"><Activity size={20} /> Family Health</h1>
             <div className="flex gap-2">
-              <button onClick={() => setIsAddChildOpen(true)} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"><UserPlus size={18} /></button>
+              <button onClick={openAddProfile} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"><UserPlus size={18} /></button>
               <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"><Settings size={18} /></button>
             </div>
           </div>
           
           <Reorder.Group axis="x" values={children} onReorder={handleReorder} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
-            {children.map(child => (<ProfileItem key={child.id} child={child} isSelected={selectedChild?.id === child.id} onClick={() => setSelectedChild(child)} />))}
+            {children.map(child => (
+              <ProfileItem 
+                key={child.id} 
+                child={child} 
+                isSelected={selectedChild?.id === child.id} 
+                onClick={() => setSelectedChild(child)} 
+                onEdit={openEditProfile} 
+              />
+            ))}
           </Reorder.Group>
 
           {selectedChild && (
@@ -368,6 +458,9 @@ export default function App() {
                   {selectedChild.bloodType && <div className="flex items-center gap-1"><Droplet size={14} /><span>{selectedChild.bloodType}</span></div>}
                 </div>
               )}
+              <button onClick={() => openEditProfile(selectedChild)} className="p-1.5 bg-black/10 hover:bg-black/20 rounded-lg transition-colors ml-auto">
+                <Pencil size={14} />
+              </button>
             </div>
           )}
         </div>
@@ -428,9 +521,9 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* Add Profile Modal */}
-      <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile">
-         <form onSubmit={handleAddChild} className="space-y-4">
+      {/* Add/Edit Profile Modal */}
+      <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title={editingChild ? "Edit Profile" : "Add Profile"}>
+         <form onSubmit={handleProfileSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div>
             <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" />
             <div className="grid grid-cols-2 gap-4">
@@ -441,10 +534,14 @@ export default function App() {
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Birthday</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={newDOB} onChange={(e) => setNewDOB(e.target.value)} /></div>
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Blood Type</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newBloodType} onChange={(e) => setNewBloodType(e.target.value)} placeholder="e.g. O+" /></div>
             </div>
-            <Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button>
+            <div className="flex gap-2">
+              <Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button>
+              {editingChild && <Button type="button" variant="danger" className="w-auto px-3" onClick={handleDeleteProfile}><Trash2 size={20} /></Button>}
+            </div>
          </form>
       </Modal>
 
+      {/* Other Modals (Stats, Symptom, Medicine, Nutrition - same as previous) */}
       <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth"><form onSubmit={handleAddStats} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700">Weight ({settings.weightUnit})</label><input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.weight} onChange={(e) => setLogForm({...logForm, weight: e.target.value})} placeholder={`e.g. 20.5 ${settings.weightUnit}`} /></div><div><label className="block text-sm font-medium text-slate-700">Height ({settings.heightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.height} onChange={(e) => setLogForm({...logForm, height: e.target.value})} placeholder={`e.g. 110 ${settings.heightUnit}`} /></div><Button type="submit" className="w-full">Save</Button></form></Modal>
       <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms"><form onSubmit={handleAddSymptom} className="space-y-6"><div><label className="block text-sm font-medium text-slate-700 mb-2">Temperature (°{settings.tempUnit})</label><div className="flex gap-2"><input type="number" step="0.1" className="flex-1 p-4 text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl" value={logForm.temp} onChange={(e) => setLogForm({ ...logForm, temp: e.target.value })} /><div className="flex items-center justify-center bg-slate-100 w-16 rounded-xl font-bold">°{settings.tempUnit}</div></div></div><div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200'}`}>{sym}</button>))}</div><textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /><Button type="submit" className="w-full">Save</Button></form></Modal>
       <Modal isOpen={isMedicineOpen} onClose={() => setIsMedicineOpen(false)} title="Log Medicine"><form onSubmit={handleAddMedicine} className="space-y-4"><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Medicine Name" value={logForm.medicineName} onChange={(e) => setLogForm({ ...logForm, medicineName: e.target.value })} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Dosage" value={logForm.dosage} onChange={(e) => setLogForm({ ...logForm, dosage: e.target.value })} /><Button type="submit" className="w-full">Log Medicine</Button></form></Modal>
