@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, Thermometer, Pill, Clock, Baby, PawPrint, Ruler, Weight,
   ChevronRight, Trash2, Activity, StickyNote, Calendar, UserPlus,
   X, TrendingUp, List, LogOut, LogIn, Mail, Lock, AlertCircle, RefreshCw,
   Utensils, Droplets, Bone, Coffee, Settings, ArrowUp, ArrowDown, 
-  Eye, EyeOff, Download, Save, GripHorizontal, Stethoscope, FileText
+  Eye, EyeOff, Download, Save, GripHorizontal, Stethoscope, FileText,
+  Bell, BellRing, Minus
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -29,6 +30,7 @@ import { Reorder } from "framer-motion";
     measurementId: "G-YX9PTFX8G5"
   };
 
+
 // --- 2. Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -49,6 +51,51 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
     activeOutline: "bg-slate-50 border-2 border-indigo-500 text-indigo-700"
   };
   return <button type={type} onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant]} ${className}`}>{children}</button>;
+};
+
+// Custom Number Roller/Stepper Component
+const RollerInput = ({ value, onChange, step = 1, min = 0, max = 999, unit = '', label = '' }) => {
+  const handleIncrement = () => {
+    const current = parseFloat(value) || 0;
+    if (current + step <= max) onChange((current + step).toFixed(step < 1 ? 1 : 0));
+  };
+
+  const handleDecrement = () => {
+    const current = parseFloat(value) || 0;
+    if (current - step >= min) onChange((current - step).toFixed(step < 1 ? 1 : 0));
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
+      <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <button 
+          type="button" 
+          onClick={handleDecrement}
+          className="w-14 h-14 flex items-center justify-center bg-white text-slate-600 active:bg-slate-100 border-r border-slate-100 touch-manipulation"
+        >
+          <Minus size={24} />
+        </button>
+        <div className="flex-1 flex items-center justify-center relative h-14">
+          <input 
+            type="number" 
+            value={value} 
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full h-full text-center bg-transparent font-bold text-xl text-slate-800 outline-none appearance-none m-0 p-0 z-10"
+            placeholder="0"
+          />
+          {unit && <span className="absolute right-4 text-xs text-slate-400 font-medium pointer-events-none">{unit}</span>}
+        </div>
+        <button 
+          type="button" 
+          onClick={handleIncrement}
+          className="w-14 h-14 flex items-center justify-center bg-white text-slate-600 active:bg-slate-100 border-l border-slate-100 touch-manipulation"
+        >
+          <Plus size={24} />
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const Modal = ({ isOpen, onClose, title, children }) => {
@@ -135,7 +182,7 @@ export default function App() {
       { id: 'medicine', visible: true, label: 'Medicine' },
       { id: 'nutrition', visible: true, label: 'Nutrition' },
       { id: 'growth', visible: true, label: 'Growth' },
-      { id: 'doctor', visible: true, label: 'Doctor Visit' } // New Widget
+      { id: 'doctor', visible: true, label: 'Doctor Visit' }
     ]
   });
 
@@ -151,7 +198,7 @@ export default function App() {
   const [isMedicineOpen, setIsMedicineOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isNutritionOpen, setIsNutritionOpen] = useState(false);
-  const [isDoctorOpen, setIsDoctorOpen] = useState(false); // New Modal State
+  const [isDoctorOpen, setIsDoctorOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Auth Form States
@@ -172,10 +219,42 @@ export default function App() {
     medicineName: '', dosage: '', 
     weight: '', height: '', 
     nutritionType: 'food', item: '', amount: '',
-    doctorName: '', visitReason: '', prescriptions: '' // New Fields
+    doctorName: '', visitReason: '', prescriptions: '',
+    reminderHours: 0, hasReminder: false
   });
   
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
+
+  // --- Notification Logic ---
+  useEffect(() => {
+    if ("Notification" in window) {
+      if (Notification.permission !== 'granted') {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  const scheduleNotification = (medicineName, hours) => {
+    if (!("Notification" in window)) return;
+    
+    if (Notification.permission === "granted") {
+      // Calculate milliseconds
+      const ms = hours * 60 * 60 * 1000;
+      setTimeout(() => {
+        new Notification("Medicine Reminder", {
+          body: `It's time for the next dose of ${medicineName}`,
+          icon: '/pwa-512x512.png'
+        });
+      }, ms);
+      alert(`Reminder set for ${hours} hours from now.`);
+    } else {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          scheduleNotification(medicineName, hours);
+        }
+      });
+    }
+  };
 
   // --- Effects (Auth, Settings, Data) ---
   useEffect(() => {
@@ -194,10 +273,8 @@ export default function App() {
         const docRef = doc(db, 'users', user.uid, 'settings', 'config');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          // Merge with default settings to handle new keys like 'doctor' if they don't exist in DB yet
           setSettings(prev => {
             const merged = { ...prev, ...docSnap.data() };
-            // Ensure dashboardOrder has all widget types even if old config didn't
             const defaults = [
               { id: 'symptom', visible: true, label: 'Symptom' },
               { id: 'medicine', visible: true, label: 'Medicine' },
@@ -205,7 +282,6 @@ export default function App() {
               { id: 'growth', visible: true, label: 'Growth' },
               { id: 'doctor', visible: true, label: 'Doctor Visit' }
             ];
-            // Simple merge for array objects based on ID
             const finalOrder = merged.dashboardOrder || [];
             defaults.forEach(def => {
               if (!finalOrder.find(item => item.id === def.id)) {
@@ -224,7 +300,6 @@ export default function App() {
     if (!user) return;
     setDataLoading(true);
     setFetchError(null);
-    
     const q = query(collection(db, 'users', user.uid, 'children'), orderBy('order', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -240,7 +315,6 @@ export default function App() {
             setDataLoading(false);
          });
       } else {
-        console.error("Error fetching children:", error);
         setFetchError(error.message);
         setDataLoading(false);
       }
@@ -287,7 +361,7 @@ export default function App() {
     }
   };
 
-  // Common handlers
+  // Simplified handlers
   const handleAddChild = async (e) => { e.preventDefault(); if(!newChildName.trim()||!user)return; try{ const order = children.length; const docRef = await addDoc(collection(db,'users',user.uid,'children'),{name:newChildName,type:newProfileType,height:newHeight,weight:newWeight,order,createdAt:new Date().toISOString()}); if(newWeight||newHeight) await addDoc(collection(db,'users',user.uid,'logs'),{childId:docRef.id,type:'measurement',timestamp:new Date().toISOString(),height:newHeight,weight:newWeight,note:'Initial Profile'}); setNewChildName('');setNewProfileType('child');setNewHeight('');setNewWeight('');setIsAddChildOpen(false); }catch(err){alert("Save Failed: "+err.message);} };
   const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   const moveWidget = (index, direction) => { const newOrder = [...settings.dashboardOrder]; const item = newOrder[index]; newOrder.splice(index, 1); if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
@@ -296,9 +370,25 @@ export default function App() {
   const handleEmailAuth = async (e) => { e.preventDefault(); setAuthError(''); if (!email || !password) return; try { if (isSignUp) await createUserWithEmailAndPassword(auth, email, password); else await signInWithEmailAndPassword(auth, email, password); } catch (err) { setAuthError("Authentication failed. Check email/password."); } };
   const handleLogout = async () => { await signOut(auth); setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword(''); };
   
-  // Log Handlers
   const handleAddSymptom = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note }); setLogForm({...logForm, temp: '', symptoms: [], note: ''}); setIsSymptomOpen(false); };
-  const handleAddMedicine = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note }); setLogForm({...logForm, medicineName: '', dosage: '', note: ''}); setIsMedicineOpen(false); };
+  
+  const handleAddMedicine = async (e) => { 
+    e.preventDefault(); 
+    if(!user) return; 
+    await addDoc(collection(db, 'users', user.uid, 'logs'), { 
+      childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), 
+      medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note,
+      reminderHours: logForm.hasReminder ? logForm.reminderHours : 0
+    }); 
+    
+    if (logForm.hasReminder && logForm.reminderHours > 0) {
+      scheduleNotification(logForm.medicineName, logForm.reminderHours);
+    }
+
+    setLogForm({...logForm, medicineName: '', dosage: '', note: '', hasReminder: false, reminderHours: 0}); 
+    setIsMedicineOpen(false); 
+  };
+  
   const handleAddStats = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'measurement', timestamp: new Date().toISOString(), weight: logForm.weight, height: logForm.height, note: logForm.note }); const updates = {}; if(logForm.weight) updates.weight = logForm.weight; if(logForm.height) updates.height = logForm.height; if(Object.keys(updates).length>0) await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates); setLogForm({...logForm, weight: '', height: '', note: ''}); setIsStatsOpen(false); };
   const handleAddNutrition = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'nutrition', timestamp: new Date().toISOString(), nutritionType: logForm.nutritionType, item: logForm.item, amount: logForm.amount, note: logForm.note }); setLogForm({...logForm, item: '', amount: '', note: '', nutritionType: 'food'}); setIsNutritionOpen(false); };
   const handleAddDoctorVisit = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'doctor_visit', timestamp: new Date().toISOString(), doctorName: logForm.doctorName, visitReason: logForm.visitReason, prescriptions: logForm.prescriptions, note: logForm.note }); setLogForm({...logForm, doctorName: '', visitReason: '', prescriptions: '', note: ''}); setIsDoctorOpen(false); };
@@ -405,10 +495,19 @@ export default function App() {
                   <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold uppercase tracking-wider text-slate-400">{log.type.replace('_', ' ')} &bull; {formatDate(log.timestamp)} {formatTime(log.timestamp)}</span><button onClick={() => deleteLog(log.id)} className="text-slate-300 hover:text-red-400"><Trash2 size={14} /></button></div>
                     
-                    {/* Log Content Rendering */}
                     {log.type === 'symptom' && <div className="flex items-start gap-3">{log.temperature && <div className="text-2xl font-bold text-slate-700">{log.temperature}°{settings.tempUnit}</div>}<div className="flex flex-wrap gap-1">{log.symptoms?.map(s => <span key={s} className="px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded-md font-medium">{s}</span>)}</div></div>}
                     
-                    {log.type === 'medicine' && <div><div className="font-bold text-slate-700 text-lg">{log.medicineName}</div><div className="text-slate-500 text-sm">{log.dosage}</div></div>}
+                    {log.type === 'medicine' && (
+                      <div>
+                        <div className="font-bold text-slate-700 text-lg">{log.medicineName}</div>
+                        <div className="text-slate-500 text-sm mb-1">{log.dosage}</div>
+                        {log.reminderHours > 0 && (
+                          <div className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-1 rounded-md text-xs font-medium">
+                            <BellRing size={12} /> Alarm set (+{log.reminderHours}h)
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
                     {log.type === 'nutrition' && <div className="flex items-center gap-3"><div className="p-2 bg-orange-50 text-orange-600 rounded-full">{log.nutritionType === 'liquid' || log.nutritionType === 'water' ? <Droplets size={20} /> : isPet ? <Bone size={20} /> : <Utensils size={20} />}</div><div><div className="font-bold text-slate-700">{log.item || (log.nutritionType === 'water' ? 'Water Refill' : 'Meal')}</div>{log.amount && <div className="text-slate-500 text-sm">{log.amount}</div>}</div></div>}
                     
@@ -454,20 +553,49 @@ export default function App() {
 
       {/* Modals */}
       <Modal isOpen={isAddChildOpen} onClose={() => setIsAddChildOpen(false)} title="Add Profile"><form onSubmit={handleAddChild} className="space-y-4"><div className="grid grid-cols-2 gap-4"><button type="button" onClick={() => setNewProfileType('child')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'child' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-slate-200'}`}><Baby size={24} />Child</button><button type="button" onClick={() => setNewProfileType('pet')} className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${newProfileType === 'pet' ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-slate-200'}`}><PawPrint size={24} />Pet</button></div><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} placeholder="Name" /><Button type="submit" className="w-full" disabled={!newChildName.trim()}>Save Profile</Button></form></Modal>
-      <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth"><form onSubmit={handleAddStats} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700">Weight ({settings.weightUnit})</label><input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.weight} onChange={(e) => setLogForm({...logForm, weight: e.target.value})} placeholder={`e.g. 20.5 ${settings.weightUnit}`} /></div><div><label className="block text-sm font-medium text-slate-700">Height ({settings.heightUnit})</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={logForm.height} onChange={(e) => setLogForm({...logForm, height: e.target.value})} placeholder={`e.g. 110 ${settings.heightUnit}`} /></div><Button type="submit" className="w-full">Save</Button></form></Modal>
-      <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms"><form onSubmit={handleAddSymptom} className="space-y-6"><div><label className="block text-sm font-medium text-slate-700 mb-2">Temperature (°{settings.tempUnit})</label><div className="flex gap-2"><input type="number" step="0.1" className="flex-1 p-4 text-2xl font-bold text-center bg-slate-50 border border-slate-200 rounded-xl" value={logForm.temp} onChange={(e) => setLogForm({ ...logForm, temp: e.target.value })} /><div className="flex items-center justify-center bg-slate-100 w-16 rounded-xl font-bold">°{settings.tempUnit}</div></div></div><div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200'}`}>{sym}</button>))}</div><textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /><Button type="submit" className="w-full">Save</Button></form></Modal>
-      <Modal isOpen={isMedicineOpen} onClose={() => setIsMedicineOpen(false)} title="Log Medicine"><form onSubmit={handleAddMedicine} className="space-y-4"><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Medicine Name" value={logForm.medicineName} onChange={(e) => setLogForm({ ...logForm, medicineName: e.target.value })} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Dosage" value={logForm.dosage} onChange={(e) => setLogForm({ ...logForm, dosage: e.target.value })} /><Button type="submit" className="w-full">Log Medicine</Button></form></Modal>
-      <Modal isOpen={isNutritionOpen} onClose={() => setIsNutritionOpen(false)} title="Log Nutrition"><form onSubmit={handleAddNutrition} className="space-y-4"><div className="flex gap-4 mb-2"><button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'food'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'food' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'border-slate-200'}`}>{isPet ? <Bone /> : <Utensils />} Food</button><button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'liquid'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'liquid' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200'}`}><Droplets /> Drink</button></div><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Item / Type" value={logForm.item} onChange={(e) => setLogForm({...logForm, item: e.target.value})} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Amount" value={logForm.amount} onChange={(e) => setLogForm({...logForm, amount: e.target.value})} /><Button type="submit" className="w-full bg-orange-600 shadow-orange-200 hover:bg-orange-700">Log</Button></form></Modal>
       
-      <Modal isOpen={isDoctorOpen} onClose={() => setIsDoctorOpen(false)} title="Record Doctor Visit">
-        <form onSubmit={handleAddDoctorVisit} className="space-y-4">
-          <div><label className="block text-sm font-medium text-slate-700 mb-1">Doctor / Clinic Name</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Dr. Smith" value={logForm.doctorName} onChange={(e) => setLogForm({...logForm, doctorName: e.target.value})} /></div>
-          <div><label className="block text-sm font-medium text-slate-700 mb-1">Reason for Visit</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Annual Checkup, Fever" value={logForm.visitReason} onChange={(e) => setLogForm({...logForm, visitReason: e.target.value})} /></div>
-          <div><label className="block text-sm font-medium text-slate-700 mb-1">Prescriptions & Schedule</label><textarea rows="4" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Amoxicillin 500mg - Twice daily for 7 days" value={logForm.prescriptions} onChange={(e) => setLogForm({...logForm, prescriptions: e.target.value})} /></div>
-          <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Additional Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} />
-          <Button type="submit" className="w-full bg-purple-600 shadow-purple-200 hover:bg-purple-700">Save Visit</Button>
+      <Modal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} title="Log Growth">
+        <form onSubmit={handleAddStats} className="space-y-4">
+          <RollerInput label={`Weight (${settings.weightUnit})`} value={logForm.weight} onChange={(val) => setLogForm({...logForm, weight: val})} step={0.1} min={0} max={500} unit={settings.weightUnit} />
+          <RollerInput label={`Height (${settings.heightUnit})`} value={logForm.height} onChange={(val) => setLogForm({...logForm, height: val})} step={1} min={0} max={300} unit={settings.heightUnit} />
+          <Button type="submit" className="w-full">Save</Button>
         </form>
       </Modal>
+
+      <Modal isOpen={isSymptomOpen} onClose={() => setIsSymptomOpen(false)} title="Log Symptoms">
+        <form onSubmit={handleAddSymptom} className="space-y-6">
+          <RollerInput label={`Temperature (°${settings.tempUnit})`} value={logForm.temp} onChange={(val) => setLogForm({...logForm, temp: val})} step={0.1} min={30} max={45} unit={`°${settings.tempUnit}`} />
+          <div className="flex flex-wrap gap-2">{commonSymptoms.map(sym => (<button key={sym} type="button" onClick={() => toggleSymptom(sym)} className={`px-3 py-2 rounded-lg text-sm border ${logForm.symptoms.includes(sym) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200'}`}>{sym}</button>))}</div>
+          <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /><Button type="submit" className="w-full">Save</Button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isMedicineOpen} onClose={() => setIsMedicineOpen(false)} title="Log Medicine">
+        <form onSubmit={handleAddMedicine} className="space-y-4">
+          <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Medicine Name" value={logForm.medicineName} onChange={(e) => setLogForm({ ...logForm, medicineName: e.target.value })} />
+          <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Dosage" value={logForm.dosage} onChange={(e) => setLogForm({ ...logForm, dosage: e.target.value })} />
+          
+          {/* Reminder UI */}
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-2 text-blue-800 font-medium"><Bell size={18} /> Set Reminder</div>
+              <div onClick={() => setLogForm({...logForm, hasReminder: !logForm.hasReminder})} className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${logForm.hasReminder ? 'bg-blue-500' : 'bg-slate-300'}`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${logForm.hasReminder ? 'left-7' : 'left-1'}`}></div>
+              </div>
+            </div>
+            {logForm.hasReminder && (
+              <RollerInput label="Remind me in (hours):" value={logForm.reminderHours} onChange={(val) => setLogForm({...logForm, reminderHours: val})} step={1} min={1} max={24} unit="hrs" />
+            )}
+          </div>
+
+          <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} />
+          <Button type="submit" className="w-full">Log Medicine</Button>
+        </form>
+      </Modal>
+      
+      <Modal isOpen={isNutritionOpen} onClose={() => setIsNutritionOpen(false)} title="Log Nutrition"><form onSubmit={handleAddNutrition} className="space-y-4"><div className="flex gap-4 mb-2"><button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'food'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'food' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'border-slate-200'}`}>{isPet ? <Bone /> : <Utensils />} Food</button><button type="button" onClick={() => setLogForm({...logForm, nutritionType: 'liquid'})} className={`flex-1 p-4 rounded-xl border flex flex-col items-center gap-2 ${logForm.nutritionType === 'liquid' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200'}`}><Droplets /> Drink</button></div><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Item / Type" value={logForm.item} onChange={(e) => setLogForm({...logForm, item: e.target.value})} /><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Amount" value={logForm.amount} onChange={(e) => setLogForm({...logForm, amount: e.target.value})} /><Button type="submit" className="w-full bg-orange-600 shadow-orange-200 hover:bg-orange-700">Log</Button></form></Modal>
+      
+      <Modal isOpen={isDoctorOpen} onClose={() => setIsDoctorOpen(false)} title="Record Doctor Visit"><form onSubmit={handleAddDoctorVisit} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Doctor / Clinic Name</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Dr. Smith" value={logForm.doctorName} onChange={(e) => setLogForm({...logForm, doctorName: e.target.value})} /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Reason for Visit</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Annual Checkup, Fever" value={logForm.visitReason} onChange={(e) => setLogForm({...logForm, visitReason: e.target.value})} /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Prescriptions & Schedule</label><textarea rows="4" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="e.g. Amoxicillin 500mg - Twice daily for 7 days" value={logForm.prescriptions} onChange={(e) => setLogForm({...logForm, prescriptions: e.target.value})} /></div><textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="Additional Notes..." value={logForm.note} onChange={(e) => setLogForm({ ...logForm, note: e.target.value })} /><Button type="submit" className="w-full bg-purple-600 shadow-purple-200 hover:bg-purple-700">Save Visit</Button></form></Modal>
 
     </div>
   );
