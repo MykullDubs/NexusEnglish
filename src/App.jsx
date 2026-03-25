@@ -167,12 +167,18 @@ function DadBodTracker({ user }) {
   const [latestWeight, setLatestWeight] = useState(null);
   const [weightLogs, setWeightLogs] = useState([]);
 
+  // Settings State (IF & Goals)
+  const [eatStart, setEatStart] = useState("12:00");
+  const [eatEnd, setEatEnd] = useState("20:00");
+  const [calorieGoal, setCalorieGoal] = useState(2000);
+  const [showSettings, setShowSettings] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    // 1. Fetch Calorie Logs (Ordered newest first)
+    // 1. Fetch Calorie Logs
     const calQuery = query(collection(db, `users/${user.uid}/calories`), orderBy("timestamp", "desc"));
     const unsubCals = onSnapshot(calQuery, (snapshot) => {
       const logs = [];
@@ -180,8 +186,6 @@ function DadBodTracker({ user }) {
       snapshot.forEach((doc) => {
         const data = doc.data();
         logs.push({ id: doc.id, ...data });
-        
-        // Sum up today's total
         if (data.timestamp && data.timestamp.toDate() >= startOfToday) {
           todayTotal += data.amount;
         }
@@ -201,7 +205,21 @@ function DadBodTracker({ user }) {
       if (logs.length > 0) setLatestWeight(logs[0].weight);
     });
 
-    return () => { unsubCals(); unsubWeight(); };
+    // 3. Fetch Settings
+    const settingsRef = doc(db, `users/${user.uid}/settings/dadbod`);
+    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        if (docSnap.data().eatStart) {
+          setEatStart(docSnap.data().eatStart);
+          setEatEnd(docSnap.data().eatEnd);
+        }
+        if (docSnap.data().calorieGoal) {
+          setCalorieGoal(docSnap.data().calorieGoal);
+        }
+      }
+    });
+
+    return () => { unsubCals(); unsubWeight(); unsubSettings(); };
   }, [user]);
 
   const handleLogCalories = async (e) => {
@@ -227,18 +245,35 @@ function DadBodTracker({ user }) {
   };
 
   const handleDeleteCalorie = async (id) => {
-    if(window.confirm("Delete this log?")) {
-      await deleteDoc(doc(db, `users/${user.uid}/calories`, id));
-    }
+    if(window.confirm("Delete this log?")) await deleteDoc(doc(db, `users/${user.uid}/calories`, id));
   };
 
   const handleDeleteWeight = async (id) => {
-    if(window.confirm("Delete this weight entry?")) {
-      await deleteDoc(doc(db, `users/${user.uid}/weights`, id));
-    }
+    if(window.confirm("Delete this weight entry?")) await deleteDoc(doc(db, `users/${user.uid}/weights`, id));
   };
 
-  // Format data for the line chart (needs chronological order: oldest to newest)
+  const saveDadBodSettings = async (start, end, goal) => {
+    setEatStart(start);
+    setEatEnd(end);
+    setCalorieGoal(goal);
+    if (user) await setDoc(doc(db, `users/${user.uid}/settings/dadbod`), { eatStart: start, eatEnd: end, calorieGoal: goal }, { merge: true });
+  };
+
+  const checkCompliance = (timestamp) => {
+    if (!timestamp) return true;
+    const date = timestamp.toDate();
+    const logTime = date.getHours() + date.getMinutes() / 60;
+    
+    const [sH, sM] = eatStart.split(':').map(Number);
+    const startTime = sH + sM / 60;
+    
+    const [eH, eM] = eatEnd.split(':').map(Number);
+    const endTime = eH + eM / 60;
+
+    if (startTime < endTime) return logTime >= startTime && logTime <= endTime;
+    return logTime >= startTime || logTime <= endTime;
+  };
+
   const weightChartData = [...weightLogs].reverse().map(l => ({
     date: l.timestamp?.toDate().toISOString() || new Date().toISOString(),
     value: l.weight
@@ -247,38 +282,73 @@ function DadBodTracker({ user }) {
   const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDate = (timestamp) => timestamp?.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' });
 
-  // Filter to only show today's calories in the timeline to keep it clean
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const todaysCalorieLogs = calorieLogs.filter(log => log.timestamp?.toDate() >= startOfToday);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
-      {/* Dashboard Stats */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center">
-        <div>
-          <p className="text-slate-500 text-sm font-medium mb-1">Today's Intake</p>
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight">{todayCalories} <span className="text-lg text-slate-400 font-medium">kcal</span></h2>
+      
+      {/* 1. MASTER DASHBOARD STATS */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="text-slate-500 text-sm font-medium mb-1">Today's Intake</p>
+            <h2 className="text-4xl font-black text-slate-800 tracking-tight">
+              {todayCalories} <span className="text-lg text-slate-400 font-medium">/ {calorieGoal}</span>
+            </h2>
+          </div>
+          <div className="text-right">
+            <p className="text-slate-500 text-sm font-medium mb-1">Current Weight</p>
+            <div className="text-2xl font-bold text-slate-800">{latestWeight || "--"} <span className="text-sm text-slate-400 font-medium">lbs</span></div>
+          </div>
         </div>
-        <div className="text-right">
-          <p className="text-slate-500 text-sm font-medium mb-1">Current Weight</p>
-          <div className="text-2xl font-bold text-slate-800">{latestWeight || "--"} <span className="text-sm text-slate-400 font-medium">lbs</span></div>
+        
+        {/* IF Schedule Banner */}
+        <div className="flex items-center gap-2 pt-4 border-t border-slate-100 text-sm font-medium text-slate-600">
+          <Clock size={16} className="text-blue-500" />
+          <span>Eating Window: <span className="text-blue-600 font-bold">{eatStart} - {eatEnd}</span></span>
         </div>
       </div>
 
-      {/* Calorie Slider */}
+      {/* 2. CALORIE SLIDER & TIMELINE */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Utensils className="w-5 h-5 text-blue-500" />
-          <h2 className="text-lg font-bold">Quick Calorie Log</h2>
+        
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Utensils className="w-5 h-5 text-blue-500" />
+            <h2 className="text-lg font-bold">Quick Calorie Log</h2>
+          </div>
+          <button type="button" onClick={() => setShowSettings(!showSettings)} className="text-xs font-bold text-blue-500 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg transition-all active:scale-95">
+            <Settings size={12}/> Target & IF
+          </button>
         </div>
+
+        {/* Hidden Settings Panel */}
+        {showSettings && (
+          <div className="mb-4 p-4 bg-blue-50 rounded-xl border border-blue-100 grid grid-cols-2 gap-3 animate-in slide-in-from-top-2">
+              <div className="col-span-2">
+                  <label className="text-[10px] font-bold text-blue-800 uppercase">Daily Calorie Goal</label>
+                  <input type="number" step="50" value={calorieGoal} onChange={(e) => saveDadBodSettings(eatStart, eatEnd, Number(e.target.value))} className="w-full bg-white border-none rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none shadow-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                  <label className="text-[10px] font-bold text-blue-800 uppercase">Window Start</label>
+                  <input type="time" value={eatStart} onChange={(e) => saveDadBodSettings(e.target.value, eatEnd, calorieGoal)} className="w-full bg-white border-none rounded-lg px-2 py-2 text-sm font-bold text-slate-700 outline-none shadow-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                  <label className="text-[10px] font-bold text-blue-800 uppercase">Window End</label>
+                  <input type="time" value={eatEnd} onChange={(e) => saveDadBodSettings(eatStart, e.target.value, calorieGoal)} className="w-full bg-white border-none rounded-lg px-2 py-2 text-sm font-bold text-slate-700 outline-none shadow-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+          </div>
+        )}
+
         <form onSubmit={handleLogCalories} className="space-y-6">
           <div className="space-y-4">
             <div className="flex justify-between items-end">
               <span className="text-5xl font-black text-blue-600 tracking-tighter">{sliderCals}</span>
             </div>
             <input 
-              type="range" min="50" max="1500" step="50" value={sliderCals}
+              type="range" min="50" max="2500" step="50" value={sliderCals}
               onChange={(e) => setSliderCals(e.target.value)}
               className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
             />
@@ -292,38 +362,43 @@ function DadBodTracker({ user }) {
           </button>
         </form>
 
-        {/* TODAY'S CALORIE TIMELINE */}
         {todaysCalorieLogs.length > 0 && (
           <div className="pt-6 border-t border-slate-100">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Today's Logs</h3>
             <div className="space-y-3">
-              {todaysCalorieLogs.map(log => (
-                <div key={log.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div>
-                    <div className="font-semibold text-slate-700">{log.note}</div>
-                    <div className="text-xs text-slate-400">{formatTime(log.timestamp)}</div>
+              {todaysCalorieLogs.map(log => {
+                const isCompliant = checkCompliance(log.timestamp);
+                return (
+                  <div key={log.id} className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${isCompliant ? 'bg-slate-50 border-slate-100' : 'bg-red-50 border-red-200 shadow-sm'}`}>
+                    <div>
+                      <div className="font-semibold text-slate-700 flex items-center gap-2">
+                        {log.note}
+                        {!isCompliant && <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Fasting</span>}
+                      </div>
+                      <div className={`text-xs ${isCompliant ? 'text-slate-400' : 'text-red-400 font-medium'}`}>{formatTime(log.timestamp)}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`font-black ${isCompliant ? 'text-blue-600' : 'text-red-600'}`}>{log.amount} <span className="text-xs font-medium opacity-60">kcal</span></span>
+                      <button onClick={() => handleDeleteCalorie(log.id)} className={`${isCompliant ? 'text-slate-300 hover:text-red-500' : 'text-red-300 hover:text-red-600'} p-1 transition-colors`}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-blue-600">{log.amount} <span className="text-xs font-medium text-slate-400">kcal</span></span>
-                    <button onClick={() => handleDeleteCalorie(log.id)} className="text-slate-300 hover:text-red-500 p-1 transition-colors">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
       </div>
 
-      {/* Weight Tracker & Graph */}
+      {/* 3. WEIGHT TRACKER & GRAPH */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-6">
         <div className="flex items-center gap-2 mb-2">
           <Weight className="w-5 h-5 text-indigo-500" />
           <h2 className="text-lg font-bold">Daily Weigh-In</h2>
         </div>
         
-<       form onSubmit={handleLogWeight} className="flex gap-3">
+        <form onSubmit={handleLogWeight} className="flex gap-3">
           <input 
             type="number" step="0.1" placeholder="e.g. 185.5" value={currentWeight} onChange={(e) => setCurrentWeight(e.target.value)}
             className="flex-1 min-w-0 bg-slate-50 border-none rounded-2xl px-4 py-4 text-slate-700 text-lg font-bold outline-none focus:ring-2 focus:ring-indigo-500"
@@ -333,7 +408,6 @@ function DadBodTracker({ user }) {
           </button>
         </form>
 
-        {/* WEIGHT GRAPH */}
         {weightChartData.length > 0 && (
           <div className="pt-4">
              <SimpleLineChart 
@@ -342,7 +416,6 @@ function DadBodTracker({ user }) {
                 unit=" lbs" 
                 colorHex="#6366f1" 
              />
-             {/* Simple Weight History List */}
              <div className="mt-4 max-h-32 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
                 {weightLogs.map(log => (
                   <div key={log.id} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded-lg">
