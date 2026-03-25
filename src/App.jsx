@@ -405,59 +405,62 @@ function DadBodTracker({ user }) {
   const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
   const todaysCalorieLogs = calorieLogs.filter(log => log.timestamp?.toDate() >= startOfToday);
 
-  return (
+return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
-      <div className="bg-white p-6 rounded-[28px] shadow-sm space-y-4">
+      
+      {/* 1. MASTER DASHBOARD STATS */}
+      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-4">
         <div className="flex justify-between items-start">
           <div>
-            <p className="text-slate-600 text-sm font-medium mb-1">Today's Intake</p>
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight">{todayCalories} <span className="text-lg text-slate-400 font-medium">/ {calorieGoal}</span></h2>
+            <p className="text-slate-400 text-sm font-medium mb-1">Today's Intake</p>
+            <h2 className="text-4xl font-black text-white tracking-tight">{todayCalories} <span className="text-lg text-slate-500 font-medium">/ {calorieGoal}</span></h2>
           </div>
           <div className="text-right">
-            <p className="text-slate-600 text-sm font-medium mb-1">Weight</p>
-            <div className="text-2xl font-bold text-slate-900">{latestWeight || "--"} <span className="text-sm text-slate-400 font-medium">lbs</span></div>
+            <p className="text-slate-400 text-sm font-medium mb-1">Weight</p>
+            <div className="text-2xl font-bold text-white">{latestWeight || "--"} <span className="text-sm text-slate-500 font-medium">lbs</span></div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-[28px] shadow-sm space-y-6">
+      {/* 2. CALORIE SLIDER & TIMELINE */}
+      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3"><div className="p-2 bg-blue-100 text-blue-700 rounded-full"><Utensils size={18} /></div><h2 className="text-lg font-bold text-slate-900">Food Log</h2></div>
-          <button type="button" onClick={() => setShowSettings(!showSettings)} className="text-xs font-bold text-blue-700 flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-full transition-all active:scale-95"><Settings size={14}/> Goals</button>
+          <div className="flex items-center gap-3"><div className="p-2 bg-blue-500/20 text-blue-400 rounded-full"><Utensils size={18} /></div><h2 className="text-lg font-bold text-white">Food Log</h2></div>
+          <button type="button" onClick={() => setShowSettings(!showSettings)} className="text-xs font-bold text-blue-400 flex items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-2 rounded-full transition-all active:scale-95"><Settings size={14}/> Goals</button>
         </div>
 
         {showSettings && (
-          <div className="p-4 bg-slate-50 rounded-3xl grid grid-cols-2 gap-3 animate-in slide-in-from-top-2">
-              <div className="col-span-2"><label className="text-xs font-bold text-slate-600 ml-2">Daily Calorie Goal</label><input type="number" step="50" value={calorieGoal} onChange={(e) => saveDadBodSettings(eatStart, eatEnd, Number(e.target.value))} className="w-full bg-white rounded-full px-4 py-3 text-base font-bold text-slate-800 outline-none mt-1 shadow-sm" /></div>
-              <div><label className="text-xs font-bold text-slate-600 ml-2">Window Start</label><input type="time" value={eatStart} onChange={(e) => saveDadBodSettings(e.target.value, eatEnd, calorieGoal)} className="w-full bg-white rounded-full px-4 py-3 text-sm font-bold text-slate-800 outline-none mt-1 shadow-sm" /></div>
-              <div><label className="text-xs font-bold text-slate-600 ml-2">Window End</label><input type="time" value={eatEnd} onChange={(e) => saveDadBodSettings(eatStart, e.target.value, calorieGoal)} className="w-full bg-white rounded-full px-4 py-3 text-sm font-bold text-slate-800 outline-none mt-1 shadow-sm" /></div>
+          <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-3xl grid grid-cols-2 gap-3 animate-in slide-in-from-top-2">
+              <div className="col-span-2"><label className="text-xs font-bold text-slate-400 ml-2">Daily Calorie Goal</label><input type="number" step="50" value={calorieGoal} onChange={(e) => saveDadBodSettings(eatStart, eatEnd, Number(e.target.value))} className="w-full bg-slate-800 rounded-full px-4 py-3 text-base font-bold text-white outline-none mt-1 shadow-inner focus:ring-2 focus:ring-blue-500/50 border border-slate-700" /></div>
+              <div><label className="text-xs font-bold text-slate-400 ml-2">Window Start</label><input type="time" value={eatStart} onChange={(e) => saveDadBodSettings(e.target.value, eatEnd, calorieGoal)} className="w-full bg-slate-800 rounded-full px-4 py-3 text-sm font-bold text-white outline-none mt-1 shadow-inner focus:ring-2 focus:ring-blue-500/50 border border-slate-700" /></div>
+              <div><label className="text-xs font-bold text-slate-400 ml-2">Window End</label><input type="time" value={eatEnd} onChange={(e) => saveDadBodSettings(eatStart, e.target.value, calorieGoal)} className="w-full bg-slate-800 rounded-full px-4 py-3 text-sm font-bold text-white outline-none mt-1 shadow-inner focus:ring-2 focus:ring-blue-500/50 border border-slate-700" /></div>
           </div>
         )}
 
         <form onSubmit={handleLogCalories} className="space-y-6">
-          <div className="space-y-4 bg-slate-50 p-6 rounded-3xl">
-            <div className="flex justify-center items-end"><span className="text-6xl font-black text-blue-600 tracking-tighter">{sliderCals}</span></div>
-            <input type="range" min="50" max="2500" step="50" value={sliderCals} onChange={(e) => setSliderCals(e.target.value)} className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer accent-blue-600" />
+          <div className="space-y-4 bg-slate-800/30 border border-slate-800 p-6 rounded-3xl">
+            <div className="flex justify-center items-end"><span className="text-6xl font-black text-blue-500 tracking-tighter">{sliderCals}</span></div>
+            <input type="range" min="50" max="2500" step="50" value={sliderCals} onChange={(e) => setSliderCals(e.target.value)} className="w-full h-3 bg-slate-700 rounded-full appearance-none cursor-pointer accent-blue-500" />
           </div>
-          <input type="text" placeholder="What did you eat? (Optional)" value={foodNote} onChange={(e) => setFoodNote(e.target.value)} className="w-full bg-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-200 transition-colors outline-none" />
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-full shadow-md flex justify-center gap-2 transition-all active:scale-95"><Plus className="w-6 h-6" /> Log Calories</button>
+          <input type="text" placeholder="What did you eat? (Optional)" value={foodNote} onChange={(e) => setFoodNote(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-full px-5 py-4 text-white placeholder:text-slate-500 focus:bg-slate-700 transition-colors outline-none" />
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white text-lg font-bold py-4 rounded-full shadow-lg shadow-blue-900/20 flex justify-center gap-2 transition-all active:scale-95"><Plus className="w-6 h-6" /> Log Calories</button>
         </form>
 
         {todaysCalorieLogs.length > 0 && (
-          <div className="pt-6 border-t border-slate-100">
+          <div className="pt-6 border-t border-slate-800">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 ml-2">Today's Logs</h3>
             <div className="space-y-2">
               {todaysCalorieLogs.map(log => {
                 const isCompliant = checkCompliance(log.timestamp);
                 return (
-                  <div key={log.id} className={`flex justify-between items-center p-4 rounded-[20px] transition-colors ${isCompliant ? 'bg-slate-50' : 'bg-red-50'}`}>
+                  <div key={log.id} className={`flex justify-between items-center p-4 rounded-[20px] transition-colors border ${isCompliant ? 'bg-slate-800/50 border-slate-700' : 'bg-red-950/30 border-red-900/50'}`}>
                     <div>
-                      <div className="font-bold text-slate-800 flex items-center gap-2">{log.note}{!isCompliant && <span className="text-[10px] font-black bg-red-200 text-red-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Fasting</span>}</div>
-                      <div className={`text-sm ${isCompliant ? 'text-slate-500' : 'text-red-500 font-medium'}`}>{formatTime(log.timestamp)}</div>
+                      <div className="font-bold text-slate-200 flex items-center gap-2">{log.note}{!isCompliant && <span className="text-[10px] font-black bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full uppercase tracking-wider">Fasting</span>}</div>
+                      <div className={`text-sm ${isCompliant ? 'text-slate-500' : 'text-red-400/80 font-medium'}`}>{formatTime(log.timestamp)}</div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className={`font-black text-lg ${isCompliant ? 'text-blue-700' : 'text-red-700'}`}>{log.amount} <span className="text-xs font-bold opacity-60">kcal</span></span>
-                      <button onClick={() => handleDeleteCalorie(log.id)} className={`p-2 rounded-full transition-colors ${isCompliant ? 'text-slate-400 hover:bg-slate-200' : 'text-red-400 hover:bg-red-200'}`}><Trash2 size={16} /></button>
+                      <span className={`font-black text-lg ${isCompliant ? 'text-blue-400' : 'text-red-400'}`}>{log.amount} <span className="text-xs font-bold opacity-60">kcal</span></span>
+                      <button onClick={() => handleDeleteCalorie(log.id)} className={`p-2 rounded-full transition-colors ${isCompliant ? 'text-slate-500 hover:bg-slate-700 hover:text-red-400' : 'text-red-500 hover:bg-red-900/50'}`}><Trash2 size={16} /></button>
                     </div>
                   </div>
                 );
@@ -467,20 +470,21 @@ function DadBodTracker({ user }) {
         )}
       </div>
 
-      <div className="bg-white p-6 rounded-[28px] shadow-sm space-y-6">
-        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-indigo-100 text-indigo-700 rounded-full"><Weight size={18} /></div><h2 className="text-lg font-bold text-slate-900">Weigh-In</h2></div>
+      {/* 3. WEIGHT TRACKER & GRAPH */}
+      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-6">
+        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-full"><Weight size={18} /></div><h2 className="text-lg font-bold text-white">Weigh-In</h2></div>
         <form onSubmit={handleLogWeight} className="flex gap-3">
-          <input type="number" step="0.1" placeholder="e.g. 185.5" value={currentWeight} onChange={(e) => setCurrentWeight(e.target.value)} className="flex-1 min-w-0 bg-slate-100 rounded-full px-5 py-4 text-slate-800 text-lg font-bold outline-none focus:bg-slate-200 transition-colors" />
-          <button type="submit" disabled={!currentWeight} className="w-16 shrink-0 bg-indigo-100 disabled:bg-slate-100 text-indigo-700 disabled:text-slate-400 rounded-full font-bold flex items-center justify-center transition-all active:scale-95"><Check className="w-6 h-6" /></button>
+          <input type="number" step="0.1" placeholder="e.g. 185.5" value={currentWeight} onChange={(e) => setCurrentWeight(e.target.value)} className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded-full px-5 py-4 text-white placeholder:text-slate-500 text-lg font-bold outline-none focus:bg-slate-700 transition-colors" />
+          <button type="submit" disabled={!currentWeight} className="w-16 shrink-0 bg-indigo-600 disabled:bg-slate-800 text-white disabled:text-slate-600 rounded-full font-bold flex items-center justify-center transition-all active:scale-95"><Check className="w-6 h-6" /></button>
         </form>
         {weightChartData.length > 0 && (
           <div className="pt-2">
-             <SimpleLineChart data={weightChartData} title="Weight Trend" unit=" lbs" colorHex="#4f46e5" />
-             <div className="mt-4 max-h-32 overflow-y-auto space-y-1 pr-2 scrollbar-thin">
+             <div className="opacity-90"><SimpleLineChart data={weightChartData} title="Weight Trend" unit=" lbs" colorHex="#818cf8" /></div>
+             <div className="mt-4 max-h-32 overflow-y-auto space-y-1 pr-2 scrollbar-thin scrollbar-thumb-slate-700">
                 {weightLogs.map(log => (
-                  <div key={log.id} className="flex justify-between items-center text-sm p-3 hover:bg-slate-50 rounded-2xl">
-                    <span className="text-slate-600 font-medium">{formatDate(log.timestamp)}</span>
-                    <div className="flex items-center gap-4"><span className="font-bold text-slate-800 text-base">{log.weight} lbs</span><button onClick={() => handleDeleteWeight(log.id)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button></div>
+                  <div key={log.id} className="flex justify-between items-center text-sm p-3 hover:bg-slate-800 rounded-2xl transition-colors border border-transparent hover:border-slate-700">
+                    <span className="text-slate-400 font-medium">{formatDate(log.timestamp)}</span>
+                    <div className="flex items-center gap-4"><span className="font-bold text-slate-200 text-base">{log.weight} lbs</span><button onClick={() => handleDeleteWeight(log.id)} className="text-slate-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition-colors"><Trash2 size={16} /></button></div>
                   </div>
                 ))}
              </div>
@@ -490,7 +494,6 @@ function DadBodTracker({ user }) {
     </div>
   );
 }
-
 // --- MAIN APP ---
 export default function App() {
   const [user, setUser] = useState(null);
@@ -711,10 +714,10 @@ export default function App() {
       </div>
   );
 
-  return (
-    <div className="min-h-screen bg-slate-100 font-sans pb-24 md:pb-0 selection:bg-indigo-200 selection:text-indigo-900">
-      <div className="max-w-md mx-auto min-h-screen bg-slate-100 overflow-hidden flex flex-col relative">
-        
+return (
+    <div className={`min-h-screen font-sans pb-24 md:pb-0 selection:bg-indigo-500 selection:text-white transition-colors duration-500 ${isDadBodMode ? 'bg-slate-950' : 'bg-slate-100'}`}>
+      <div className={`max-w-md mx-auto min-h-screen overflow-hidden flex flex-col relative transition-colors duration-500 ${isDadBodMode ? 'bg-slate-950' : 'bg-slate-100'}`}>        
+       
         {/* Header App Bar */}
         <div className={`${themeBg} p-6 pb-10 text-white rounded-b-[40px] shadow-sm z-10 transition-colors duration-500`}>
           <div className="flex justify-between items-center mb-6">
