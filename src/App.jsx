@@ -159,25 +159,46 @@ const SimpleLineChart = ({ data, colorHex, unit, title }) => {
 function DadBodTracker({ user }) {
   const [sliderCals, setSliderCals] = useState(300);
   const [foodNote, setFoodNote] = useState("");
+  
   const [todayCalories, setTodayCalories] = useState(0);
+  const [calorieLogs, setCalorieLogs] = useState([]);
+  
   const [currentWeight, setCurrentWeight] = useState("");
   const [latestWeight, setLatestWeight] = useState(null);
+  const [weightLogs, setWeightLogs] = useState([]);
 
   useEffect(() => {
     if (!user) return;
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const calQuery = query(collection(db, `users/${user.uid}/calories`), where("timestamp", ">=", Timestamp.fromDate(startOfToday)));
+    // 1. Fetch Calorie Logs (Ordered newest first)
+    const calQuery = query(collection(db, `users/${user.uid}/calories`), orderBy("timestamp", "desc"));
     const unsubCals = onSnapshot(calQuery, (snapshot) => {
-      let total = 0;
-      snapshot.forEach((doc) => total += doc.data().amount);
-      setTodayCalories(total);
+      const logs = [];
+      let todayTotal = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        logs.push({ id: doc.id, ...data });
+        
+        // Sum up today's total
+        if (data.timestamp && data.timestamp.toDate() >= startOfToday) {
+          todayTotal += data.amount;
+        }
+      });
+      setCalorieLogs(logs);
+      setTodayCalories(todayTotal);
     });
 
+    // 2. Fetch Weight Logs
     const weightQuery = query(collection(db, `users/${user.uid}/weights`), orderBy("timestamp", "desc"));
     const unsubWeight = onSnapshot(weightQuery, (snapshot) => {
-      if (!snapshot.empty) setLatestWeight(snapshot.docs[0].data().weight);
+      const logs = [];
+      snapshot.forEach((doc) => {
+        logs.push({ id: doc.id, ...doc.data() });
+      });
+      setWeightLogs(logs);
+      if (logs.length > 0) setLatestWeight(logs[0].weight);
     });
 
     return () => { unsubCals(); unsubWeight(); };
@@ -198,12 +219,41 @@ function DadBodTracker({ user }) {
   const handleLogWeight = async (e) => {
     e.preventDefault();
     if (!user || !currentWeight) return;
-    await addDoc(collection(db, `users/${user.uid}/weights`), { weight: Number(currentWeight), timestamp: Timestamp.now() });
+    await addDoc(collection(db, `users/${user.uid}/weights`), { 
+      weight: Number(currentWeight), 
+      timestamp: Timestamp.now() 
+    });
     setCurrentWeight("");
   };
 
+  const handleDeleteCalorie = async (id) => {
+    if(window.confirm("Delete this log?")) {
+      await deleteDoc(doc(db, `users/${user.uid}/calories`, id));
+    }
+  };
+
+  const handleDeleteWeight = async (id) => {
+    if(window.confirm("Delete this weight entry?")) {
+      await deleteDoc(doc(db, `users/${user.uid}/weights`, id));
+    }
+  };
+
+  // Format data for the line chart (needs chronological order: oldest to newest)
+  const weightChartData = [...weightLogs].reverse().map(l => ({
+    date: l.timestamp?.toDate().toISOString() || new Date().toISOString(),
+    value: l.weight
+  }));
+
+  const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatDate = (timestamp) => timestamp?.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+  // Filter to only show today's calories in the timeline to keep it clean
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todaysCalorieLogs = calorieLogs.filter(log => log.timestamp?.toDate() >= startOfToday);
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto">
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       {/* Dashboard Stats */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center">
         <div>
@@ -237,32 +287,81 @@ function DadBodTracker({ user }) {
             type="text" placeholder="What did you eat? (Optional)" value={foodNote} onChange={(e) => setFoodNote(e.target.value)}
             className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
           />
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-2xl shadow-lg flex justify-center gap-2">
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-2xl shadow-lg flex justify-center gap-2 transition-all active:scale-95">
             <Plus className="w-6 h-6" /> Log {sliderCals} Calories
           </button>
         </form>
+
+        {/* TODAY'S CALORIE TIMELINE */}
+        {todaysCalorieLogs.length > 0 && (
+          <div className="pt-6 border-t border-slate-100">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Today's Logs</h3>
+            <div className="space-y-3">
+              {todaysCalorieLogs.map(log => (
+                <div key={log.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div>
+                    <div className="font-semibold text-slate-700">{log.note}</div>
+                    <div className="text-xs text-slate-400">{formatTime(log.timestamp)}</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-black text-blue-600">{log.amount} <span className="text-xs font-medium text-slate-400">kcal</span></span>
+                    <button onClick={() => handleDeleteCalorie(log.id)} className="text-slate-300 hover:text-red-500 p-1 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Weight Tracker */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-        <div className="flex items-center gap-2 mb-4">
+      {/* Weight Tracker & Graph */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-6">
+        <div className="flex items-center gap-2 mb-2">
           <Weight className="w-5 h-5 text-indigo-500" />
           <h2 className="text-lg font-bold">Daily Weigh-In</h2>
         </div>
-        <form onSubmit={handleLogWeight} className="flex gap-3">
+        
+<       form onSubmit={handleLogWeight} className="flex gap-3">
           <input 
             type="number" step="0.1" placeholder="e.g. 185.5" value={currentWeight} onChange={(e) => setCurrentWeight(e.target.value)}
-            className="flex-1 bg-slate-50 border-none rounded-2xl px-4 py-4 text-slate-700 text-lg font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 min-w-0 bg-slate-50 border-none rounded-2xl px-4 py-4 text-slate-700 text-lg font-bold outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <button type="submit" disabled={!currentWeight} className="bg-indigo-600 disabled:bg-slate-300 text-white px-6 rounded-2xl shadow-lg flex items-center justify-center">
+          <button type="submit" disabled={!currentWeight} className="w-14 shrink-0 bg-indigo-600 disabled:bg-slate-300 text-white rounded-2xl shadow-lg flex items-center justify-center transition-all active:scale-95">
             <Check className="w-6 h-6" />
           </button>
         </form>
+
+        {/* WEIGHT GRAPH */}
+        {weightChartData.length > 0 && (
+          <div className="pt-4">
+             <SimpleLineChart 
+                data={weightChartData} 
+                title="Weight Trend" 
+                unit=" lbs" 
+                colorHex="#6366f1" 
+             />
+             {/* Simple Weight History List */}
+             <div className="mt-4 max-h-32 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
+                {weightLogs.map(log => (
+                  <div key={log.id} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded-lg">
+                    <span className="text-slate-500">{formatDate(log.timestamp)}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-slate-700">{log.weight} lbs</span>
+                      <button onClick={() => handleDeleteWeight(log.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [children, setChildren] = useState([]);
