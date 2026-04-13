@@ -379,7 +379,7 @@ function FinanceTracker({ user, showToast, askConfirm }) {
     return () => unsubSpend();
   }, [user]);
 
-  const handleLogSpend = async (e) => {
+ const handleLogSpend = async (e) => {
     e.preventDefault();
     if (!user || !amount || isNaN(amount)) return;
     
@@ -391,7 +391,8 @@ function FinanceTracker({ user, showToast, askConfirm }) {
       date: new Date().toLocaleString()
     };
 
-    await addDoc(collection(db, `users/${user.uid}/finance`), {
+    // 1. Save to Firebase first so it generates a unique ID
+    const docRef = await addDoc(collection(db, `users/${user.uid}/finance`), {
       amount: expenseData.amount,
       note: expenseData.note,
       category: expenseData.category,
@@ -399,12 +400,20 @@ function FinanceTracker({ user, showToast, askConfirm }) {
       timestamp: Timestamp.now()
     });
     
+    // 2. Package it up with the "add" command and the new ID
+    const sheetsPayload = {
+      ...expenseData,
+      action: "add",
+      id: docRef.id
+    };
+
+    // 3. Fire it to Google Sheets
     try {
       await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(expenseData)
+        body: JSON.stringify(sheetsPayload)
       });
     } catch (err) {
       console.error("Failed to sync to Google Sheets:", err);
@@ -417,8 +426,22 @@ function FinanceTracker({ user, showToast, askConfirm }) {
   };
 
   const handleDeleteSpend = (id) => {
-    askConfirm("Delete Expense", "Remove this transaction from your timeline?", async () => {
+    askConfirm("Delete Expense", "Remove this transaction from your timeline and spreadsheet?", async () => {
+      // 1. Delete from Firebase
       await deleteDoc(doc(db, `users/${user.uid}/finance`, id));
+      
+      // 2. Send the "delete" command to Google Sheets
+      try {
+        await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", id: id })
+        });
+      } catch (err) {
+        console.error("Failed to delete from Sheets", err);
+      }
+
       showToast("Expense deleted", "success");
     });
   };
