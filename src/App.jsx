@@ -17,7 +17,7 @@ import {
   getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, getDoc,
   doc, onSnapshot, query, orderBy, writeBatch, Timestamp, where
 } from "firebase/firestore";
-import { Reorder, motion, useAnimation } from "framer-motion";
+import { Reorder, motion, useAnimation, AnimatePresence } from "framer-motion";
 
 // --- 1. FIREBASE CONFIG ---
 const firebaseConfig = {
@@ -156,7 +156,7 @@ const SimpleLineChart = ({ data, colorHex, unit, title }) => {
 };
 
 // --- DAD-BOD BANNER (Top Header) ---
-function DadBodBanner({ user }) {
+function DadBodBanner({ user, showToast, askConfirm }) {
   const [eatStart, setEatStart] = useState("12:00");
   const [eatEnd, setEatEnd] = useState("20:00");
   const [waterCount, setWaterCount] = useState(0);
@@ -236,6 +236,7 @@ function DadBodBanner({ user }) {
     e.preventDefault(); if (!newHabitName.trim() || !user) return;
     await addDoc(collection(db, `users/${user.uid}/habits`), { name: newHabitName, completedDates: [], createdAt: Timestamp.now() });
     setNewHabitName("");
+    showToast("Habit tracked!", "success");
   };
   const toggleHabitDate = async (habit, dateStr) => {
     let updatedDates = [...(habit.completedDates || [])];
@@ -243,7 +244,12 @@ function DadBodBanner({ user }) {
     else updatedDates.push(dateStr);
     await updateDoc(doc(db, `users/${user.uid}/habits`, habit.id), { completedDates: updatedDates });
   };
-  const handleDeleteHabit = async (id) => { if (window.confirm("Delete habit?")) await deleteDoc(doc(db, `users/${user.uid}/habits`, id)); };
+  const handleDeleteHabit = (id) => { 
+    askConfirm("Delete Habit", "Are you sure you want to stop tracking this habit?", async () => {
+      await deleteDoc(doc(db, `users/${user.uid}/habits`, id));
+      showToast("Habit deleted", "success");
+    });
+  };
 
   const getLocalYYYYMMDD = (date) => {
     const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0');
@@ -326,7 +332,7 @@ function DadBodBanner({ user }) {
 }
 
 // --- FINANCE TRACKER COMPONENT (MD3 Styled) ---
-function FinanceTracker({ user }) {
+function FinanceTracker({ user, showToast, askConfirm }) {
   const [viewCurrency, setViewCurrency] = useState("MXN");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -357,7 +363,6 @@ function FinanceTracker({ user }) {
       
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Fallback to USD for old entries without a currency label
         const curr = data.currency || "USD"; 
         logs.push({ id: doc.id, ...data, currency: curr });
         
@@ -378,7 +383,6 @@ function FinanceTracker({ user }) {
     e.preventDefault();
     if (!user || !amount || isNaN(amount)) return;
     
-    // Create the payload package
     const expenseData = {
       amount: parseFloat(amount),
       note: note || category,
@@ -387,7 +391,6 @@ function FinanceTracker({ user }) {
       date: new Date().toLocaleString()
     };
 
-    // 1. Save to your Firebase Database (For the app UI)
     await addDoc(collection(db, `users/${user.uid}/finance`), {
       amount: expenseData.amount,
       note: expenseData.note,
@@ -396,43 +399,39 @@ function FinanceTracker({ user }) {
       timestamp: Timestamp.now()
     });
     
-    // 2. Fire it off to Google Sheets!
     try {
       await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
         method: "POST",
-        mode: "no-cors", // This bypasses strict browser security for personal webhooks
+        mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(expenseData)
       });
     } catch (err) {
       console.error("Failed to sync to Google Sheets:", err);
+      showToast("Error syncing to Google Sheets", "error");
     }
     
-    // Reset the UI
     setAmount("");
     setNote("");
+    showToast(`${viewCurrency} Expense logged!`, "success");
   };
 
-  const handleDeleteSpend = async (id) => {
-    if(window.confirm("Delete this expense?")) {
+  const handleDeleteSpend = (id) => {
+    askConfirm("Delete Expense", "Remove this transaction from your timeline?", async () => {
       await deleteDoc(doc(db, `users/${user.uid}/finance`, id));
-    }
+      showToast("Expense deleted", "success");
+    });
   };
 
   const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  
-  // Filter timeline to ONLY show the currently selected currency
   const todaysLogs = spendLogs.filter(log => log.currency === viewCurrency && log.timestamp?.toDate() >= startOfToday);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       
-      {/* 1. MASTER DASHBOARD STATS */}
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-4">
-        
-        {/* CURRENCY TOGGLE */}
         <div className="flex justify-between items-center mb-2 pb-4 border-b border-emerald-50">
           <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
           <div className="flex bg-slate-100 rounded-full p-1">
@@ -455,7 +454,6 @@ function FinanceTracker({ user }) {
         </div>
       </div>
 
-      {/* 2. QUICK ADD EXPENSE */}
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-6">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-100 text-emerald-700 rounded-full"><Wallet size={18} /></div>
@@ -533,7 +531,7 @@ function FinanceTracker({ user }) {
 }
 
 // --- DAD-BOD TRACKER COMPONENT (MD3 Styled) ---
-function DadBodTracker({ user }) {
+function DadBodTracker({ user, showToast, askConfirm }) {
   const [sliderCals, setSliderCals] = useState(300);
   const [foodNote, setFoodNote] = useState("");
   const [todayCalories, setTodayCalories] = useState(0);
@@ -582,16 +580,29 @@ function DadBodTracker({ user }) {
     e.preventDefault(); if (!user) return;
     await addDoc(collection(db, `users/${user.uid}/calories`), { amount: Number(sliderCals), note: foodNote || "Quick Add", timestamp: Timestamp.now() });
     setSliderCals(300); setFoodNote("");
+    showToast("Calories logged!", "success");
   };
 
   const handleLogWeight = async (e) => {
     e.preventDefault(); if (!user || !currentWeight) return;
     await addDoc(collection(db, `users/${user.uid}/weights`), { weight: Number(currentWeight), timestamp: Timestamp.now() });
     setCurrentWeight("");
+    showToast("Weight logged!", "success");
   };
 
-  const handleDeleteCalorie = async (id) => { if(window.confirm("Delete log?")) await deleteDoc(doc(db, `users/${user.uid}/calories`, id)); };
-  const handleDeleteWeight = async (id) => { if(window.confirm("Delete weight?")) await deleteDoc(doc(db, `users/${user.uid}/weights`, id)); };
+  const handleDeleteCalorie = (id) => { 
+    askConfirm("Delete Log", "Are you sure you want to remove this calorie log?", async () => {
+      await deleteDoc(doc(db, `users/${user.uid}/calories`, id));
+      showToast("Log deleted", "success");
+    });
+  };
+  
+  const handleDeleteWeight = (id) => { 
+    askConfirm("Delete Weigh-in", "Are you sure you want to remove this weight record?", async () => {
+      await deleteDoc(doc(db, `users/${user.uid}/weights`, id));
+      showToast("Record deleted", "success");
+    });
+  };
 
   const saveDadBodSettings = async (start, end, goal) => {
     setEatStart(start); setEatEnd(end); setCalorieGoal(goal);
@@ -753,6 +764,19 @@ export default function App() {
     isRecurring: false, scheduleFrequency: 8, scheduleDuration: 5
   });
 
+  // --- NEW: TOAST & CONFIRM STATES ---
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', text: '', action: null });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
+  };
+
+  const askConfirm = (title, text, action) => {
+    setConfirmModal({ visible: true, title, text, action });
+  };
+
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
   const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 
@@ -778,7 +802,7 @@ export default function App() {
         const ms = frequencyHours * i * 60 * 60 * 1000;
         if (frequencyHours * i <= 24) setTimeout(() => new Notification("Medicine Reminder", { body: `Time for dose #${i} of ${medicineName}`, icon: '/pwa-512x512.png' }), ms);
       }
-      alert(`Schedule created! Reminders set for every ${frequencyHours} hours.`);
+      showToast(`Reminders set for every ${frequencyHours} hours.`, "success");
     } else {
       Notification.requestPermission().then(p => { if (p === "granted") scheduleBatchNotifications(medicineName, frequencyHours, days); });
     }
@@ -852,7 +876,7 @@ export default function App() {
 
   const handleSaveSettings = async (newSettings) => {
     setSettings(newSettings);
-    if (user) try { await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings); } catch (e) { console.error("Error saving settings", e); }
+    if (user) try { await setDoc(doc(db, 'users', user.uid, 'settings', 'config'), newSettings); showToast("Settings saved", "success"); } catch (e) { console.error("Error saving settings", e); }
   };
 
   const handleSaveProfile = async (e) => {
@@ -861,14 +885,16 @@ export default function App() {
       const profileData = { name: newChildName, type: newProfileType, height: newHeight, weight: newWeight, dob: newDob, bloodType: newBloodType };
       if (editingId) {
         await updateDoc(doc(db, 'users', user.uid, 'children', editingId), profileData);
+        showToast("Profile updated!", "success");
       } else {
         const docRef = await addDoc(collection(db, 'users', user.uid, 'children'), { ...profileData, order: children.length, createdAt: new Date().toISOString() });
         if (newWeight || newHeight) {
           await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: docRef.id, type: 'measurement', timestamp: new Date().toISOString(), height: newHeight, weight: newWeight, note: 'Initial Profile Creation' });
         }
+        showToast("Profile created!", "success");
       }
       closeProfileModal();
-    } catch (err) { alert("Save Failed: " + err.message); }
+    } catch (err) { showToast("Save Failed: " + err.message, "error"); }
   };
 
   const openAddProfile = () => { setEditingId(null); setNewChildName(''); setNewProfileType('child'); setNewHeight(''); setNewWeight(''); setNewDob(''); setNewBloodType(''); setIsAddChildOpen(true); };
@@ -884,17 +910,25 @@ export default function App() {
   const handleEmailAuth = async (e) => { e.preventDefault(); setAuthError(''); if (!email || !password) return; try { if (isSignUp) await createUserWithEmailAndPassword(auth, email, password); else await signInWithEmailAndPassword(auth, email, password); } catch (err) { setAuthError("Authentication failed."); } };
   const handleLogout = async () => { await signOut(auth); setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword(''); };
   
-  const handleAddSymptom = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note }); setLogForm({...logForm, temp: '', symptoms: [], note: ''}); setIsSymptomOpen(false); };
+  const handleAddSymptom = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note }); setLogForm({...logForm, temp: '', symptoms: [], note: ''}); setIsSymptomOpen(false); showToast("Symptom logged!", "success"); };
   const handleAddMedicine = async (e) => { 
     e.preventDefault(); if(!user) return; 
     await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'medicine', timestamp: new Date().toISOString(), medicineName: logForm.medicineName, dosage: logForm.dosage, note: logForm.note, isRecurring: logForm.isRecurring, scheduleFrequency: logForm.isRecurring ? logForm.scheduleFrequency : 0, scheduleDuration: logForm.isRecurring ? logForm.scheduleDuration : 0 });
     if (logForm.isRecurring && logForm.scheduleFrequency > 0 && logForm.scheduleDuration > 0) scheduleBatchNotifications(logForm.medicineName, logForm.scheduleFrequency, logForm.scheduleDuration);
     setLogForm({...logForm, medicineName: '', dosage: '', note: '', isRecurring: false, scheduleFrequency: 8, scheduleDuration: 5}); setIsMedicineOpen(false); 
+    showToast("Medicine logged!", "success");
   };
-  const handleAddStats = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'measurement', timestamp: new Date().toISOString(), weight: logForm.weight, height: logForm.height, note: logForm.note }); const updates = {}; if(logForm.weight) updates.weight = logForm.weight; if(logForm.height) updates.height = logForm.height; if(Object.keys(updates).length>0) await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates); setLogForm({...logForm, weight: '', height: '', note: ''}); setIsStatsOpen(false); };
-  const handleAddNutrition = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'nutrition', timestamp: new Date().toISOString(), nutritionType: logForm.nutritionType, item: logForm.item, amount: logForm.amount, note: logForm.note }); setLogForm({...logForm, item: '', amount: '', note: '', nutritionType: 'food'}); setIsNutritionOpen(false); };
-  const handleAddDoctorVisit = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'doctor_visit', timestamp: new Date().toISOString(), doctorName: logForm.doctorName, visitReason: logForm.visitReason, prescriptions: logForm.prescriptions, note: logForm.note }); setLogForm({...logForm, doctorName: '', visitReason: '', prescriptions: '', note: ''}); setIsDoctorOpen(false); };
-  const deleteLog = async (id) => { if(window.confirm("Delete?")) await deleteDoc(doc(db, 'users', user.uid, 'logs', id)); };
+  const handleAddStats = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'measurement', timestamp: new Date().toISOString(), weight: logForm.weight, height: logForm.height, note: logForm.note }); const updates = {}; if(logForm.weight) updates.weight = logForm.weight; if(logForm.height) updates.height = logForm.height; if(Object.keys(updates).length>0) await updateDoc(doc(db, 'users', user.uid, 'children', selectedChild.id), updates); setLogForm({...logForm, weight: '', height: '', note: ''}); setIsStatsOpen(false); showToast("Growth logged!", "success"); };
+  const handleAddNutrition = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'nutrition', timestamp: new Date().toISOString(), nutritionType: logForm.nutritionType, item: logForm.item, amount: logForm.amount, note: logForm.note }); setLogForm({...logForm, item: '', amount: '', note: '', nutritionType: 'food'}); setIsNutritionOpen(false); showToast("Nutrition logged!", "success"); };
+  const handleAddDoctorVisit = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'doctor_visit', timestamp: new Date().toISOString(), doctorName: logForm.doctorName, visitReason: logForm.visitReason, prescriptions: logForm.prescriptions, note: logForm.note }); setLogForm({...logForm, doctorName: '', visitReason: '', prescriptions: '', note: ''}); setIsDoctorOpen(false); showToast("Visit recorded!", "success"); };
+  
+  const deleteLog = (id) => { 
+    askConfirm("Delete Log", "Are you sure you want to remove this log entry?", async () => {
+      await deleteDoc(doc(db, 'users', user.uid, 'logs', id));
+      showToast("Log entry deleted", "success");
+    });
+  };
+  
   const toggleSymptom = (s) => { if(logForm.symptoms.includes(s)) setLogForm({...logForm, symptoms: logForm.symptoms.filter(x=>x!==s)}); else setLogForm({...logForm, symptoms: [...logForm.symptoms, s]}); };
 
   const isPet = selectedChild?.type === 'pet';
@@ -939,6 +973,31 @@ export default function App() {
 
 return (
     <div className={`min-h-screen font-sans pb-24 selection:bg-indigo-500 selection:text-white transition-colors duration-500 ${appBg}`}>
+      
+      {/* --- NEW: CUSTOM TOAST COMPONENT --- */}
+      <AnimatePresence>
+        {toast.visible && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }} 
+            animate={{ opacity: 1, y: 0, scale: 1 }} 
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 z-[100] text-sm font-bold text-white whitespace-nowrap ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-800'}`}
+          >
+            {toast.type === 'error' ? <AlertCircle size={18} /> : <Check size={18} />}
+            {toast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- NEW: CUSTOM CONFIRMATION MODAL --- */}
+      <Modal isOpen={confirmModal.visible} onClose={() => setConfirmModal({ ...confirmModal, visible: false })} title={confirmModal.title}>
+        <p className="text-slate-600 font-medium mb-6">{confirmModal.text}</p>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1 !border-slate-200" onClick={() => setConfirmModal({ ...confirmModal, visible: false })}>Cancel</Button>
+          <Button variant="danger" className="flex-1" onClick={() => { confirmModal.action(); setConfirmModal({ ...confirmModal, visible: false }); }}>Delete</Button>
+        </div>
+      </Modal>
+
       <div className={`max-w-md mx-auto min-h-screen overflow-hidden flex flex-col relative transition-colors duration-500 ${appBg}`}>        
         
         {/* Header App Bar */}
@@ -965,7 +1024,7 @@ return (
           </div>
   
           {/* DADBOD BANNER */}
-          {activeTab === 'dadbod' && <DadBodBanner user={user} />}
+          {activeTab === 'dadbod' && <DadBodBanner user={user} showToast={showToast} askConfirm={askConfirm} />}
 
           {activeTab === 'family' && children.length > 0 && (
             <>
@@ -997,13 +1056,13 @@ return (
 
         {activeTab === 'dadbod' && (
           <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20">
-            <DadBodTracker user={user} />
+            <DadBodTracker user={user} showToast={showToast} askConfirm={askConfirm} />
           </div>
         )}
 
         {activeTab === 'finance' && (
           <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20">
-            <FinanceTracker user={user} />
+            <FinanceTracker user={user} showToast={showToast} askConfirm={askConfirm} />
           </div>
         )}
 
