@@ -5,7 +5,8 @@ import {
   X, TrendingUp, List, LogOut, LogIn, Mail, Lock, Unlock, AlertCircle, RefreshCw,
   Utensils, Droplets, Bone, Settings, ArrowUp, ArrowDown, 
   Eye, EyeOff, Download, GripHorizontal, Stethoscope,
-  Bell, BellRing, Minus, Pencil, Droplet, Repeat, Check, User, ChevronDown, ChevronUp
+  Bell, BellRing, Minus, Pencil, Droplet, Repeat, Check, User, ChevronDown, ChevronUp,
+  Wallet, Coffee, Car, Home, ShoppingBag, Tag
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -324,6 +325,177 @@ function DadBodBanner({ user }) {
   );
 }
 
+// --- FINANCE TRACKER COMPONENT (MD3 Styled) ---
+function FinanceTracker({ user }) {
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [category, setCategory] = useState("Food");
+  
+  const [todayTotal, setTodayTotal] = useState(0);
+  const [monthTotal, setMonthTotal] = useState(0);
+  const [spendLogs, setSpendLogs] = useState([]);
+
+  const categories = [
+    { name: "Food", icon: <Coffee size={16} />, color: "bg-orange-100 text-orange-700" },
+    { name: "Transport", icon: <Car size={16} />, color: "bg-blue-100 text-blue-700" },
+    { name: "Bills", icon: <Home size={16} />, color: "bg-purple-100 text-purple-700" },
+    { name: "Shopping", icon: <ShoppingBag size={16} />, color: "bg-pink-100 text-pink-700" },
+    { name: "Other", icon: <Tag size={16} />, color: "bg-slate-100 text-slate-700" }
+  ];
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const spendQuery = query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc"));
+    const unsubSpend = onSnapshot(spendQuery, (snapshot) => {
+      const logs = [];
+      let tTotal = 0;
+      let mTotal = 0;
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        logs.push({ id: doc.id, ...data });
+        
+        if (data.timestamp) {
+          const logDate = data.timestamp.toDate();
+          if (logDate >= startOfToday) tTotal += data.amount;
+          if (logDate >= startOfMonth) mTotal += data.amount;
+        }
+      });
+      setSpendLogs(logs);
+      setTodayTotal(tTotal);
+      setMonthTotal(mTotal);
+    });
+
+    return () => unsubSpend();
+  }, [user]);
+
+  const handleLogSpend = async (e) => {
+    e.preventDefault();
+    if (!user || !amount || isNaN(amount)) return;
+    
+    await addDoc(collection(db, `users/${user.uid}/finance`), {
+      amount: parseFloat(amount),
+      note: note || category,
+      category: category,
+      timestamp: Timestamp.now()
+    });
+    
+    setAmount("");
+    setNote("");
+  };
+
+  const handleDeleteSpend = async (id) => {
+    if(window.confirm("Delete this expense?")) {
+      await deleteDoc(doc(db, `users/${user.uid}/finance`, id));
+    }
+  };
+
+  const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todaysLogs = spendLogs.filter(log => log.timestamp?.toDate() >= startOfToday);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
+      
+      {/* 1. MASTER DASHBOARD STATS */}
+      <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">Today's Spend</p>
+            <h2 className="text-4xl font-black text-emerald-950 tracking-tight">
+              <span className="text-2xl text-emerald-600 mr-1">$</span>{todayTotal.toFixed(2)}
+            </h2>
+          </div>
+          <div className="text-right">
+            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p>
+            <div className="text-xl font-bold text-slate-800">${monthTotal.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. QUICK ADD EXPENSE */}
+      <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-100 text-emerald-700 rounded-full"><Wallet size={18} /></div>
+          <h2 className="text-lg font-bold text-slate-900">Quick Expense</h2>
+        </div>
+
+        <form onSubmit={handleLogSpend} className="space-y-6">
+          <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center relative">
+            <span className="absolute left-6 text-3xl font-black text-emerald-400">$</span>
+            <input 
+              type="number" 
+              step="0.01" 
+              placeholder="0.00" 
+              value={amount} 
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-4"
+            />
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {categories.map(cat => (
+              <button 
+                key={cat.name} 
+                type="button" 
+                onClick={() => setCategory(cat.name)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all shrink-0 border-2
+                  ${category === cat.name ? `border-emerald-500 ${cat.color} shadow-sm` : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+              >
+                {cat.icon} {cat.name}
+              </button>
+            ))}
+          </div>
+
+          <input 
+            type="text" 
+            placeholder="What was it for? (Optional)" 
+            value={note} 
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-100 transition-colors outline-none"
+          />
+          
+          <button type="submit" disabled={!amount} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-lg font-bold py-4 rounded-full shadow-md shadow-emerald-600/20 flex justify-center gap-2 transition-all active:scale-95">
+            <Plus className="w-6 h-6" /> Add Expense
+          </button>
+        </form>
+
+        {todaysLogs.length > 0 && (
+          <div className="pt-6 border-t border-slate-100">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-2">Today's Transactions</h3>
+            <div className="space-y-2">
+              {todaysLogs.map(log => {
+                const catInfo = categories.find(c => c.name === log.category) || categories[4];
+                return (
+                  <div key={log.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-2xl transition-colors border border-transparent hover:border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-full ${catInfo.color}`}>{catInfo.icon}</div>
+                      <div>
+                        <div className="font-bold text-slate-800">{log.note}</div>
+                        <div className="text-xs text-slate-400 font-medium">{formatTime(log.timestamp)}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-black text-lg text-emerald-700">${log.amount.toFixed(2)}</span>
+                      <button onClick={() => handleDeleteSpend(log.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- DAD-BOD TRACKER COMPONENT (MD3 Styled) ---
 function DadBodTracker({ user }) {
   const [sliderCals, setSliderCals] = useState(300);
@@ -408,7 +580,6 @@ function DadBodTracker({ user }) {
 return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       
-      {/* 1. MASTER DASHBOARD STATS */}
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-4">
         <div className="flex justify-between items-start">
           <div>
@@ -422,7 +593,6 @@ return (
         </div>
       </div>
 
-      {/* 2. CALORIE SLIDER & TIMELINE */}
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3"><div className="p-2 bg-blue-500/20 text-blue-400 rounded-full"><Utensils size={18} /></div><h2 className="text-lg font-bold text-white">Food Log</h2></div>
@@ -470,7 +640,6 @@ return (
         )}
       </div>
 
-      {/* 3. WEIGHT TRACKER & GRAPH */}
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-6">
         <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-full"><Weight size={18} /></div><h2 className="text-lg font-bold text-white">Weigh-In</h2></div>
         <form onSubmit={handleLogWeight} className="flex gap-3">
@@ -494,6 +663,7 @@ return (
     </div>
   );
 }
+
 // --- MAIN APP ---
 export default function App() {
   const [user, setUser] = useState(null);
@@ -522,8 +692,11 @@ export default function App() {
   const [isDoctorOpen, setIsDoctorOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReorderLocked, setIsReorderLocked] = useState(true);
-  const [isDadBodMode, setIsDadBodMode] = useState(false);
+  
+  // NEW TAB NAVIGATION STATE
+  const [activeTab, setActiveTab] = useState('family'); 
   const controls = useAnimation();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -548,8 +721,14 @@ export default function App() {
   const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 
   const handleDragEnd = (event, info) => {
-    if (info.offset.x > 80) setIsDadBodMode(true);
-    else if (info.offset.x < -80) setIsDadBodMode(false);
+    const tabs = ['family', 'dadbod', 'finance'];
+    const currentIndex = tabs.indexOf(activeTab);
+    
+    if (info.offset.x > 80 && currentIndex > 0) {
+      setActiveTab(tabs[currentIndex - 1]);
+    } else if (info.offset.x < -80 && currentIndex < tabs.length - 1) {
+      setActiveTab(tabs[currentIndex + 1]);
+    }
     controls.start({ x: 0 });
   };
 
@@ -685,10 +864,18 @@ export default function App() {
   const isPet = selectedChild?.type === 'pet';
   const isAdult = selectedChild?.type === 'adult';
   
+  // DYNAMIC APP COLORING
   let themeBg = 'bg-indigo-600'; 
-  if (isPet) themeBg = 'bg-amber-600'; 
-  if (isAdult) themeBg = 'bg-emerald-600';
-  if (isDadBodMode) themeBg = 'bg-slate-900'; 
+  if (activeTab === 'family') {
+    if (isPet) themeBg = 'bg-amber-600'; 
+    if (isAdult) themeBg = 'bg-emerald-600';
+  } else if (activeTab === 'dadbod') {
+    themeBg = 'bg-slate-900'; 
+  } else if (activeTab === 'finance') {
+    themeBg = 'bg-emerald-600';
+  }
+
+  const appBg = activeTab === 'dadbod' ? 'bg-slate-950' : 'bg-slate-100';
 
   const currentChildLogs = logs.filter(l => l.childId === selectedChild?.id);
   const temperatureData = useMemo(() => currentChildLogs.filter(l => l.type === 'symptom' && l.temperature).map(l => ({ date: l.timestamp, value: l.temperature })).sort((a, b) => new Date(a.date) - new Date(b.date)), [currentChildLogs]);
@@ -698,11 +885,11 @@ export default function App() {
 
   if (authLoading || (user && dataLoading)) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-500 font-medium">Loading...</p></div>;
 
-  if (!user) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6"><div className="w-full max-w-md bg-white p-8 rounded-[32px] shadow-sm text-center"><div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={40} className="text-indigo-600" /></div><h1 className="text-2xl font-black text-slate-900 mb-8">Family Health Status</h1><Button onClick={handleGoogleLogin} variant="google" className="mb-6"><LogIn size={20} /> Sign in with Google</Button><form onSubmit={handleEmailAuth} className="space-y-4 text-left">{authError && <div className="p-3 bg-red-100 text-red-900 text-sm rounded-2xl text-center font-medium">{authError}</div>}<div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Email</label><div className="relative"><Mail className="absolute left-4 top-4 text-slate-400" size={20} /><input type="email" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div><div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Password</label><div className="relative"><Lock className="absolute left-4 top-4 text-slate-400" size={20} /><input type="password" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div><Button type="submit" className="w-full mt-2">{isSignUp ? "Create Account" : "Log In"}</Button></form><button onClick={() => setIsSignUp(!isSignUp)} className="mt-8 text-indigo-600 text-sm font-bold hover:text-indigo-800">{isSignUp ? "Log In Instead" : "Create an Account"}</button></div></div>;
+  if (!user) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6"><div className="w-full max-w-md bg-white p-8 rounded-[32px] shadow-sm text-center"><div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={40} className="text-indigo-600" /></div><h1 className="text-2xl font-black text-slate-900 mb-8">Life OS</h1><Button onClick={handleGoogleLogin} variant="google" className="mb-6"><LogIn size={20} /> Sign in with Google</Button><form onSubmit={handleEmailAuth} className="space-y-4 text-left">{authError && <div className="p-3 bg-red-100 text-red-900 text-sm rounded-2xl text-center font-medium">{authError}</div>}<div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Email</label><div className="relative"><Mail className="absolute left-4 top-4 text-slate-400" size={20} /><input type="email" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div><div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Password</label><div className="relative"><Lock className="absolute left-4 top-4 text-slate-400" size={20} /><input type="password" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div><Button type="submit" className="w-full mt-2">{isSignUp ? "Create Account" : "Log In"}</Button></form><button onClick={() => setIsSignUp(!isSignUp)} className="mt-8 text-indigo-600 text-sm font-bold hover:text-indigo-800">{isSignUp ? "Log In Instead" : "Create an Account"}</button></div></div>;
 
   if (fetchError) return <div className="p-6 text-center"><h1 className="text-red-600 font-bold">Error</h1><p>{fetchError}</p><Button onClick={() => window.location.reload()}>Retry</Button></div>;
 
-  if (children.length === 0 && !isDadBodMode) return (
+  if (children.length === 0 && activeTab === 'family') return (
       <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-md bg-white p-8 rounded-[32px] shadow-sm text-center">
           <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40} className="text-indigo-600"/></div>
@@ -715,21 +902,23 @@ export default function App() {
   );
 
 return (
-    <div className={`min-h-screen font-sans pb-24 md:pb-0 selection:bg-indigo-500 selection:text-white transition-colors duration-500 ${isDadBodMode ? 'bg-slate-950' : 'bg-slate-100'}`}>
-      <div className={`max-w-md mx-auto min-h-screen overflow-hidden flex flex-col relative transition-colors duration-500 ${isDadBodMode ? 'bg-slate-950' : 'bg-slate-100'}`}>        
-       
+    <div className={`min-h-screen font-sans pb-24 selection:bg-indigo-500 selection:text-white transition-colors duration-500 ${appBg}`}>
+      <div className={`max-w-md mx-auto min-h-screen overflow-hidden flex flex-col relative transition-colors duration-500 ${appBg}`}>        
+        
         {/* Header App Bar */}
         <div className={`${themeBg} p-6 pb-10 text-white rounded-b-[40px] shadow-sm z-10 transition-colors duration-500`}>
           <div className="flex justify-between items-center mb-6">
             <motion.div drag="x" dragConstraints={{ left: 0, right: 0 }} onDragEnd={handleDragEnd} animate={controls} className="cursor-grab active:cursor-grabbing inline-block select-none touch-pan-y">
               <h1 className="text-2xl font-black flex items-center gap-2 tracking-tight">
-                {isDadBodMode ? "Dad-bod Mode" : <><Activity size={24} /> Family Health</>}
+                {activeTab === 'dadbod' && "Dad-bod Mode"}
+                {activeTab === 'finance' && "Wallet"}
+                {activeTab === 'family' && <><Activity size={24} /> Family Health</>}
               </h1>
               <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-1 animate-pulse">&larr; Swipe to switch &rarr;</p>
             </motion.div>
             
             <div className="flex gap-2">
-              {!isDadBodMode && (
+              {activeTab === 'family' && (
                 <>
                   <button onClick={openAddProfile} className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full transition-colors"><UserPlus size={20} /></button>
                   <button onClick={() => setIsReorderLocked(!isReorderLocked)} className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full transition-colors">{isReorderLocked ? <Lock size={20} /> : <Unlock size={20} />}</button>
@@ -739,10 +928,10 @@ return (
             </div>
           </div>
   
-          {/* THE NEW BANNER */}
-          {isDadBodMode && <DadBodBanner user={user} />}
+          {/* DADBOD BANNER */}
+          {activeTab === 'dadbod' && <DadBodBanner user={user} />}
 
-          {!isDadBodMode && children.length > 0 && (
+          {activeTab === 'family' && children.length > 0 && (
             <>
               <Reorder.Group axis="x" values={children} onReorder={handleReorder} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
                 {children.map(child => (
@@ -770,11 +959,19 @@ return (
           )}
         </div>
 
-        {isDadBodMode ? (
+        {activeTab === 'dadbod' && (
           <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20">
             <DadBodTracker user={user} />
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'finance' && (
+          <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20">
+            <FinanceTracker user={user} />
+          </div>
+        )}
+
+        {activeTab === 'family' && (
           <>
             <div className="px-6 -mt-6 z-20 grid grid-cols-2 gap-4">
               {settings.dashboardOrder.filter(w => w.visible).map((widget) => {
@@ -823,6 +1020,25 @@ return (
             </div>
           </>
         )}
+
+      </div>
+
+      {/* THE NEW BOTTOM NAVIGATION BAR */}
+      <div className={`fixed bottom-0 left-0 right-0 z-50 transition-colors duration-500 ${activeTab === 'dadbod' ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'} backdrop-blur-xl border-t`}>
+        <div className="max-w-md mx-auto flex justify-around p-2 pb-safe">
+          <button onClick={() => setActiveTab('family')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'family' ? 'text-indigo-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
+            <Home size={24} className={activeTab === 'family' ? 'fill-indigo-100' : ''} />
+            <span className="text-[10px] font-bold mt-1">Family</span>
+          </button>
+          <button onClick={() => setActiveTab('dadbod')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'dadbod' ? 'text-white' : 'text-slate-400'}`}>
+            <Activity size={24} className={activeTab === 'dadbod' ? 'fill-slate-700' : ''} />
+            <span className="text-[10px] font-bold mt-1">DadBod</span>
+          </button>
+          <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'finance' ? 'text-emerald-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
+            <Wallet size={24} className={activeTab === 'finance' ? 'fill-emerald-100' : ''} />
+            <span className="text-[10px] font-bold mt-1">Wallet</span>
+          </button>
+        </div>
       </div>
 
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="App Settings">
