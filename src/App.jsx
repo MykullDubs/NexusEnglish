@@ -327,12 +327,12 @@ function DadBodBanner({ user }) {
 
 // --- FINANCE TRACKER COMPONENT (MD3 Styled) ---
 function FinanceTracker({ user }) {
+  const [viewCurrency, setViewCurrency] = useState("MXN");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [category, setCategory] = useState("Food");
   
-  const [todayTotal, setTodayTotal] = useState(0);
-  const [monthTotal, setMonthTotal] = useState(0);
+  const [totals, setTotals] = useState({ USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } });
   const [spendLogs, setSpendLogs] = useState([]);
 
   const categories = [
@@ -353,22 +353,22 @@ function FinanceTracker({ user }) {
     const spendQuery = query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc"));
     const unsubSpend = onSnapshot(spendQuery, (snapshot) => {
       const logs = [];
-      let tTotal = 0;
-      let mTotal = 0;
+      const newTotals = { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } };
       
       snapshot.forEach((doc) => {
         const data = doc.data();
-        logs.push({ id: doc.id, ...data });
+        // Fallback to USD for old entries without a currency label
+        const curr = data.currency || "USD"; 
+        logs.push({ id: doc.id, ...data, currency: curr });
         
-        if (data.timestamp) {
+        if (data.timestamp && newTotals[curr]) {
           const logDate = data.timestamp.toDate();
-          if (logDate >= startOfToday) tTotal += data.amount;
-          if (logDate >= startOfMonth) mTotal += data.amount;
+          if (logDate >= startOfToday) newTotals[curr].today += data.amount;
+          if (logDate >= startOfMonth) newTotals[curr].month += data.amount;
         }
       });
       setSpendLogs(logs);
-      setTodayTotal(tTotal);
-      setMonthTotal(mTotal);
+      setTotals(newTotals);
     });
 
     return () => unsubSpend();
@@ -382,6 +382,7 @@ function FinanceTracker({ user }) {
       amount: parseFloat(amount),
       note: note || category,
       category: category,
+      currency: viewCurrency,
       timestamp: Timestamp.now()
     });
     
@@ -398,23 +399,35 @@ function FinanceTracker({ user }) {
   const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const todaysLogs = spendLogs.filter(log => log.timestamp?.toDate() >= startOfToday);
+  
+  // Filter timeline to ONLY show the currently selected currency
+  const todaysLogs = spendLogs.filter(log => log.currency === viewCurrency && log.timestamp?.toDate() >= startOfToday);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       
       {/* 1. MASTER DASHBOARD STATS */}
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-4">
+        
+        {/* CURRENCY TOGGLE */}
+        <div className="flex justify-between items-center mb-2 pb-4 border-b border-emerald-50">
+          <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
+          <div className="flex bg-slate-100 rounded-full p-1">
+            <button onClick={() => setViewCurrency('MXN')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'MXN' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>MXN</button>
+            <button onClick={() => setViewCurrency('USD')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'USD' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>USD</button>
+          </div>
+        </div>
+
         <div className="flex justify-between items-start">
           <div>
             <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">Today's Spend</p>
             <h2 className="text-4xl font-black text-emerald-950 tracking-tight">
-              <span className="text-2xl text-emerald-600 mr-1">$</span>{todayTotal.toFixed(2)}
+              <span className="text-2xl text-emerald-600 mr-1">$</span>{totals[viewCurrency].today.toFixed(2)}
             </h2>
           </div>
           <div className="text-right">
             <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p>
-            <div className="text-xl font-bold text-slate-800">${monthTotal.toFixed(2)}</div>
+            <div className="text-xl font-bold text-slate-800">${totals[viewCurrency].month.toFixed(2)}</div>
           </div>
         </div>
       </div>
@@ -428,14 +441,14 @@ function FinanceTracker({ user }) {
 
         <form onSubmit={handleLogSpend} className="space-y-6">
           <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center relative">
-            <span className="absolute left-6 text-3xl font-black text-emerald-400">$</span>
+            <span className="absolute left-6 text-xl font-black text-emerald-400">{viewCurrency} $</span>
             <input 
               type="number" 
               step="0.01" 
               placeholder="0.00" 
               value={amount} 
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-4"
+              className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-12"
             />
           </div>
 
@@ -462,13 +475,13 @@ function FinanceTracker({ user }) {
           />
           
           <button type="submit" disabled={!amount} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-lg font-bold py-4 rounded-full shadow-md shadow-emerald-600/20 flex justify-center gap-2 transition-all active:scale-95">
-            <Plus className="w-6 h-6" /> Add Expense
+            <Plus className="w-6 h-6" /> Add {viewCurrency} Expense
           </button>
         </form>
 
         {todaysLogs.length > 0 && (
           <div className="pt-6 border-t border-slate-100">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-2">Today's Transactions</h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-2">Today's Transactions ({viewCurrency})</h3>
             <div className="space-y-2">
               {todaysLogs.map(log => {
                 const catInfo = categories.find(c => c.name === log.category) || categories[4];
