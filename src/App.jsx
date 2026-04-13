@@ -378,14 +378,37 @@ function FinanceTracker({ user }) {
     e.preventDefault();
     if (!user || !amount || isNaN(amount)) return;
     
-    await addDoc(collection(db, `users/${user.uid}/finance`), {
+    // Create the payload package
+    const expenseData = {
       amount: parseFloat(amount),
       note: note || category,
       category: category,
       currency: viewCurrency,
+      date: new Date().toLocaleString()
+    };
+
+    // 1. Save to your Firebase Database (For the app UI)
+    await addDoc(collection(db, `users/${user.uid}/finance`), {
+      amount: expenseData.amount,
+      note: expenseData.note,
+      category: expenseData.category,
+      currency: expenseData.currency,
       timestamp: Timestamp.now()
     });
     
+    // 2. Fire it off to Google Sheets!
+    try {
+      await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
+        method: "POST",
+        mode: "no-cors", // This bypasses strict browser security for personal webhooks
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(expenseData)
+      });
+    } catch (err) {
+      console.error("Failed to sync to Google Sheets:", err);
+    }
+    
+    // Reset the UI
     setAmount("");
     setNote("");
   };
