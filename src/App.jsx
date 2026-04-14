@@ -339,7 +339,7 @@ function FinanceTracker({ user, showToast, askConfirm }) {
   const [amount, setAmount] = useState(""); 
   const [note, setNote] = useState(""); 
   const [exchangeRate, setExchangeRate] = useState(""); 
-  const [isQrOpen, setIsQrOpen] = useState(false); // NEW: QR Modal State
+  const [isQrOpen, setIsQrOpen] = useState(false); 
 
   const expenseCategories = [
     { name: "Food", icon: <Coffee size={16} />, color: "bg-orange-100 text-orange-700" },
@@ -372,87 +372,119 @@ function FinanceTracker({ user, showToast, askConfirm }) {
 
   useEffect(() => {
     if (!user) return;
-    const now = new Date(); const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()); const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const unsubSpend = onSnapshot(query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc")), (snapshot) => {
-      const logs = []; 
+    
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const spendQuery = query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc"));
+    const unsubSpend = onSnapshot(spendQuery, (snapshot) => {
+      const logs = [];
       const newTotals = { 
         expense: { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } },
         income:  { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } }
       };
-
+      
       snapshot.forEach((doc) => {
-        const data = doc.data(); 
+        const data = doc.data();
         const curr = data.currency || "USD"; 
-        const tType = data.type || "expense"; 
+        const tType = data.type || "expense";
         logs.push({ id: doc.id, ...data, currency: curr, type: tType });
         
-        if (data.timestamp && newTotals[tType] && newTotals[tType][curr]) { 
-          const logDate = data.timestamp.toDate(); 
-          if (logDate >= startOfToday) newTotals[tType][curr].today += data.amount; 
-          if (logDate >= startOfMonth) newTotals[tType][curr].month += data.amount; 
+        if (data.timestamp && newTotals[tType] && newTotals[tType][curr]) {
+          const logDate = data.timestamp.toDate();
+          if (logDate >= startOfToday) newTotals[tType][curr].today += Number(data.amount) || 0;
+          if (logDate >= startOfMonth) newTotals[tType][curr].month += Number(data.amount) || 0;
         }
       });
-      setSpendLogs(logs); setTotals(newTotals);
+      setSpendLogs(logs);
+      setTotals(newTotals);
     });
+
     return () => unsubSpend();
   }, [user]);
 
   const handleLogSpend = async (e) => {
-    e.preventDefault(); if (!user || !amount || isNaN(amount)) return;
+    e.preventDefault();
+    if (!user || !amount || isNaN(amount)) return;
     
-    const expenseData = { 
-      amount: parseFloat(amount), 
-      note: note || category, 
-      category: category, 
+    const expenseData = {
+      amount: parseFloat(amount),
+      note: note || category,
+      category: category,
       currency: viewCurrency,
       type: transactionType,
       exchangeRate: parseFloat(exchangeRate) || "", 
-      date: new Date().toLocaleString() 
+      date: new Date().toLocaleString()
     };
 
-    const docRef = await addDoc(collection(db, `users/${user.uid}/finance`), { 
-      amount: expenseData.amount, 
-      note: expenseData.note, 
-      category: expenseData.category, 
+    const docRef = await addDoc(collection(db, `users/${user.uid}/finance`), {
+      amount: expenseData.amount,
+      note: expenseData.note,
+      category: expenseData.category,
       currency: expenseData.currency,
       type: expenseData.type,
       exchangeRate: expenseData.exchangeRate,
-      timestamp: Timestamp.now() 
+      timestamp: Timestamp.now()
     });
     
+    const sheetsPayload = {
+      ...expenseData,
+      action: "add",
+      id: docRef.id
+    };
+
     try {
       await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
-        method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ ...expenseData, action: "add", id: docRef.id })
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sheetsPayload)
       });
-    } catch (err) { console.error(err); showToast("Failed to sync to Google Sheets", "error"); }
+    } catch (err) {
+      console.error("Failed to sync to Google Sheets:", err);
+      showToast("Error syncing to Google Sheets", "error");
+    }
     
-    setAmount(""); setNote(""); setExchangeRate(""); showToast(`${viewCurrency} ${transactionType === 'income' ? 'Income' : 'Expense'} logged!`, "success");
+    setAmount("");
+    setNote("");
+    setExchangeRate("");
+    showToast(`${viewCurrency} ${transactionType === 'income' ? 'Income' : 'Expense'} logged!`, "success");
   };
 
-  const handleDeleteSpend = (id) => { 
-    askConfirm("Delete Transaction", "Remove this transaction from your timeline and spreadsheet?", async () => { 
-      await deleteDoc(doc(db, `users/${user.uid}/finance`, id)); 
+  const handleDeleteSpend = (id) => {
+    askConfirm("Delete Transaction", "Remove this transaction from your timeline and spreadsheet?", async () => {
+      await deleteDoc(doc(db, `users/${user.uid}/finance`, id));
+      
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
-          method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", id: id })
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", id: id })
         });
-      } catch (err) { console.error("Failed to delete from Sheets", err); }
-      showToast("Transaction deleted", "success"); 
-    }); 
+      } catch (err) {
+        console.error("Failed to delete from Sheets", err);
+      }
+
+      showToast("Transaction deleted", "success");
+    });
   };
 
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  
   const activeLogs = spendLogs.filter(log => log.type === transactionType && log.currency === viewCurrency && log.timestamp?.toDate() >= startOfToday);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-4">
+        
         <div className="flex flex-col gap-3 mb-2 pb-4 border-b border-emerald-50">
           <div className="flex justify-between items-center">
             
-            {/* NEW: Wallet Overview + QR Code Button */}
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
               <button 
@@ -476,16 +508,38 @@ function FinanceTracker({ user, showToast, askConfirm }) {
         </div>
 
         <div className="flex justify-between items-start">
-          <div><p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">{transactionType === 'income' ? "Today's Income" : "Today's Spend"}</p><h2 className={`text-4xl font-black tracking-tight ${transactionType === 'income' ? 'text-emerald-600' : 'text-emerald-950'}`}><span className="text-2xl opacity-60 mr-1">$</span>{totals[transactionType][viewCurrency].today.toFixed(2)}</h2></div>
-          <div className="text-right"><p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p><div className="text-xl font-bold text-slate-800">${totals[transactionType][viewCurrency].month.toFixed(2)}</div></div>
+          <div>
+            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">{transactionType === 'income' ? "Today's Income" : "Today's Spend"}</p>
+            <h2 className={`text-4xl font-black tracking-tight ${transactionType === 'income' ? 'text-emerald-600' : 'text-emerald-950'}`}>
+              <span className="text-2xl opacity-60 mr-1">$</span>{totals[transactionType][viewCurrency].today.toFixed(2)}
+            </h2>
+          </div>
+          <div className="text-right">
+            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p>
+            <div className="text-xl font-bold text-slate-800">${totals[transactionType][viewCurrency].month.toFixed(2)}</div>
+          </div>
         </div>
       </div>
 
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-6">
-        <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${transactionType === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}><Wallet size={18} /></div><h2 className="text-lg font-bold text-slate-900">Quick {transactionType === 'income' ? 'Income' : 'Expense'}</h2></div>
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-full ${transactionType === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}><Wallet size={18} /></div>
+          <h2 className="text-lg font-bold text-slate-900">Quick {transactionType === 'income' ? 'Income' : 'Expense'}</h2>
+        </div>
+
         <form onSubmit={handleLogSpend} className="space-y-6">
-          <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center relative"><span className="absolute left-6 text-xl font-black text-emerald-400">{viewCurrency} $</span><input type="number" step="0.01" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-12" /></div>
-          
+          <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center relative">
+            <span className="absolute left-6 text-xl font-black text-emerald-400">{viewCurrency} $</span>
+            <input 
+              type="number" 
+              step="0.01" 
+              placeholder="0.00" 
+              value={amount} 
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-12"
+            />
+          </div>
+
           <div className="flex gap-4">
             <div className="flex-1 bg-slate-50 border border-slate-100 p-3 rounded-2xl">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rate (MXN/USD)</label>
@@ -505,11 +559,30 @@ function FinanceTracker({ user, showToast, askConfirm }) {
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {currentCategories.map(cat => (<button key={cat.name} type="button" onClick={() => setCategory(cat.name)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all shrink-0 border-2 ${category === cat.name ? `border-emerald-500 ${cat.color} shadow-sm` : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{cat.icon} {cat.name}</button>))}
+            {currentCategories.map(cat => (
+              <button 
+                key={cat.name} 
+                type="button" 
+                onClick={() => setCategory(cat.name)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all shrink-0 border-2
+                  ${category === cat.name ? `border-emerald-500 ${cat.color} shadow-sm` : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+              >
+                {cat.icon} {cat.name}
+              </button>
+            ))}
           </div>
 
-          <input type="text" placeholder="What was it for? (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-100 transition-colors outline-none" />
-          <button type="submit" disabled={!amount} className={`w-full text-white text-lg font-bold py-4 rounded-full shadow-md flex justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none ${transactionType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-900/20'}`}><Plus className="w-6 h-6" /> Add {viewCurrency} {transactionType === 'income' ? 'Income' : 'Expense'}</button>
+          <input 
+            type="text" 
+            placeholder="What was it for? (Optional)" 
+            value={note} 
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-100 transition-colors outline-none"
+          />
+          
+          <button type="submit" disabled={!amount} className={`w-full text-white text-lg font-bold py-4 rounded-full shadow-md flex justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none ${transactionType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-900/20'}`}>
+            <Plus className="w-6 h-6" /> Add {viewCurrency} {transactionType === 'income' ? 'Income' : 'Expense'}
+          </button>
         </form>
 
         {activeLogs.length > 0 && (
@@ -520,8 +593,17 @@ function FinanceTracker({ user, showToast, askConfirm }) {
                 const catInfo = currentCategories.find(c => c.name === log.category) || currentCategories[currentCategories.length - 1];
                 return (
                   <div key={log.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-2xl transition-colors border border-transparent hover:border-slate-100">
-                    <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${catInfo.color}`}>{catInfo.icon}</div><div><div className="font-bold text-slate-800">{log.note}</div><div className="text-xs text-slate-400 font-medium">{log.timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {log.exchangeRate && `• Rate: $${log.exchangeRate}`}</div></div></div>
-                    <div className="flex items-center gap-4"><span className={`font-black text-lg ${transactionType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>${log.amount.toFixed(2)}</span><button onClick={() => handleDeleteSpend(log.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button></div>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-full ${catInfo.color}`}>{catInfo.icon}</div>
+                      <div>
+                        <div className="font-bold text-slate-800">{log.note}</div>
+                        <div className="text-xs text-slate-400 font-medium">{formatTime(log.timestamp)} {log.exchangeRate && `• Rate: $${log.exchangeRate}`}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className={`font-black text-lg ${transactionType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>${Number(log.amount).toFixed(2)}</span>
+                      <button onClick={() => handleDeleteSpend(log.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button>
+                    </div>
                   </div>
                 );
               })}
@@ -530,12 +612,10 @@ function FinanceTracker({ user, showToast, askConfirm }) {
         )}
       </div>
 
-      {/* NEW: QR CODE MODAL */}
       <Modal isOpen={isQrOpen} onClose={() => setIsQrOpen(false)} title="School Pass">
         <div className="flex flex-col items-center justify-center pb-4">
           <div className="bg-slate-50 p-6 rounded-3xl w-full flex flex-col items-center border border-slate-100">
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 w-full flex justify-center">
-              {/* This looks for school-qr.png in your public folder. The onError ensures it doesn't look broken if the file is missing/named wrong */}
               <img 
                 src="/school-qr.png" 
                 alt="School QR" 
@@ -575,7 +655,7 @@ function DadBodTracker({ user, showToast, askConfirm }) {
       const logs = []; let todayTotal = 0;
       snapshot.forEach((doc) => {
         const data = doc.data(); logs.push({ id: doc.id, ...data });
-        if (data.timestamp && data.timestamp.toDate() >= startOfToday) todayTotal += data.amount;
+        if (data.timestamp && data.timestamp.toDate() >= startOfToday) todayTotal += Number(data.amount) || 0;
       });
       setCalorieLogs(logs); setTodayCalories(todayTotal);
     });
@@ -739,6 +819,8 @@ export default function App() {
   const [children, setChildren] = useState([]);
   const [logs, setLogs] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
+  
+  // NEW: Added tabOrder to settings state default
   const [settings, setSettings] = useState({
     tempUnit: 'C', weightUnit: 'kg', heightUnit: 'cm', 
     dashboardOrder: [
@@ -747,8 +829,10 @@ export default function App() {
       { id: 'nutrition', visible: true, label: 'Nutrition' },
       { id: 'growth', visible: true, label: 'Growth' },
       { id: 'doctor', visible: true, label: 'Doctor Visit' }
-    ]
+    ],
+    tabOrder: ['family', 'dadbod', 'finance']
   });
+  
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
@@ -762,8 +846,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReorderLocked, setIsReorderLocked] = useState(true);
   
-  // NEW TAB NAVIGATION STATE
-  const [activeTab, setActiveTab] = useState('family'); 
+  // NEW: activeTab initializes to null so we can securely fetch from DB before rendering
+  const [activeTab, setActiveTab] = useState(null); 
   const controls = useAnimation();
   
   const [email, setEmail] = useState('');
@@ -786,7 +870,6 @@ export default function App() {
     isRecurring: false, scheduleFrequency: 8, scheduleDuration: 5
   });
 
-  // --- NEW: TOAST & CONFIRM STATES ---
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', text: '', action: null });
 
@@ -802,8 +885,9 @@ export default function App() {
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
   const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 
+  // Update Swipe to use dynamic tabOrder
   const handleDragEnd = (event, info) => {
-    const tabs = ['family', 'dadbod', 'finance'];
+    const tabs = settings.tabOrder || ['family', 'dadbod', 'finance'];
     const currentIndex = tabs.indexOf(activeTab);
     
     if (info.offset.x > 80 && currentIndex > 0) {
@@ -833,26 +917,48 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u); setAuthLoading(false);
-      if (!u) { setDataLoading(false); setFetchError(null); }
+      if (!u) { setDataLoading(false); setFetchError(null); setActiveTab(null); }
     });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) return;
+    
     const fetchSettings = async () => {
       try {
         const docSnap = await getDoc(doc(db, 'users', user.uid, 'settings', 'config'));
         if (docSnap.exists()) {
+          const data = docSnap.data();
           setSettings(prev => {
-            const merged = { ...prev, ...docSnap.data() };
+            const merged = { ...prev, ...data };
+            
+            // Dashboard Widgets
             const defaults = [{ id: 'symptom', visible: true, label: 'Symptom' }, { id: 'medicine', visible: true, label: 'Medicine' }, { id: 'nutrition', visible: true, label: 'Nutrition' }, { id: 'growth', visible: true, label: 'Growth' }, { id: 'doctor', visible: true, label: 'Doctor Visit' }];
             const finalOrder = merged.dashboardOrder || [];
             defaults.forEach(def => { if (!finalOrder.find(item => item.id === def.id)) finalOrder.push(def); });
-            return { ...merged, dashboardOrder: finalOrder };
+            merged.dashboardOrder = finalOrder;
+            
+            // Tab Navigation Order
+            let finalTabOrder = merged.tabOrder || ['family', 'dadbod', 'finance'];
+            const defaultTabs = ['family', 'dadbod', 'finance'];
+            finalTabOrder = finalTabOrder.filter(t => defaultTabs.includes(t));
+            defaultTabs.forEach(t => { if (!finalTabOrder.includes(t)) finalTabOrder.push(t); });
+            merged.tabOrder = finalTabOrder;
+            
+            return merged;
           });
+          
+          let initialTabOrder = data.tabOrder || ['family', 'dadbod', 'finance'];
+          // Set activeTab to the first tab in the user's saved list, safely checking if it's null
+          setActiveTab(prev => prev ? prev : initialTabOrder[0]);
+        } else {
+          setActiveTab(prev => prev ? prev : 'family');
         }
-      } catch (e) { console.error("Settings fetch error", e); }
+      } catch (e) { 
+        console.error("Settings fetch error", e); 
+        setActiveTab(prev => prev ? prev : 'family');
+      }
     };
     fetchSettings();
   }, [user]);
@@ -925,12 +1031,22 @@ export default function App() {
 
   const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   const moveWidget = (index, direction) => { const newOrder = [...settings.dashboardOrder]; const item = newOrder[index]; newOrder.splice(index, 1); if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
+  
+  // NEW: Feature to reorder Bottom Tabs
+  const moveTab = (index, direction) => { 
+    const newOrder = [...settings.tabOrder]; 
+    const item = newOrder[index]; 
+    newOrder.splice(index, 1); 
+    if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); 
+    else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); 
+    handleSaveSettings({ ...settings, tabOrder: newOrder }); 
+  };
 
   const handleExportData = () => { const dataStr = JSON.stringify({ children, logs, settings }, null, 2); const blob = new Blob([dataStr], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `health-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); };
   
   const handleGoogleLogin = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (error) { setAuthError("Google sign in failed."); } };
   const handleEmailAuth = async (e) => { e.preventDefault(); setAuthError(''); if (!email || !password) return; try { if (isSignUp) await createUserWithEmailAndPassword(auth, email, password); else await signInWithEmailAndPassword(auth, email, password); } catch (err) { setAuthError("Authentication failed."); } };
-  const handleLogout = async () => { await signOut(auth); setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword(''); };
+  const handleLogout = async () => { await signOut(auth); setChildren([]); setLogs([]); setSelectedChild(null); setEmail(''); setPassword(''); setActiveTab(null); };
   
   const handleAddSymptom = async (e) => { e.preventDefault(); if(!user) return; await addDoc(collection(db, 'users', user.uid, 'logs'), { childId: selectedChild.id, type: 'symptom', timestamp: new Date().toISOString(), temperature: logForm.temp, symptoms: logForm.symptoms, note: logForm.note }); setLogForm({...logForm, temp: '', symptoms: [], note: ''}); setIsSymptomOpen(false); showToast("Symptom logged!", "success"); };
   const handleAddMedicine = async (e) => { 
@@ -975,7 +1091,8 @@ export default function App() {
   const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  if (authLoading || (user && dataLoading)) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-500 font-medium">Loading...</p></div>;
+  // Update render block loading state to wait for `activeTab` as well
+  if (authLoading || (user && dataLoading) || (user && !activeTab)) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-500 font-medium">Loading...</p></div>;
 
   if (!user) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6"><div className="w-full max-w-md bg-white p-8 rounded-[32px] shadow-sm text-center"><div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={40} className="text-indigo-600" /></div><h1 className="text-2xl font-black text-slate-900 mb-8">Life OS</h1><Button onClick={handleGoogleLogin} variant="google" className="mb-6"><LogIn size={20} /> Sign in with Google</Button><form onSubmit={handleEmailAuth} className="space-y-4 text-left">{authError && <div className="p-3 bg-red-100 text-red-900 text-sm rounded-2xl text-center font-medium">{authError}</div>}<div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Email</label><div className="relative"><Mail className="absolute left-4 top-4 text-slate-400" size={20} /><input type="email" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div><div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Password</label><div className="relative"><Lock className="absolute left-4 top-4 text-slate-400" size={20} /><input type="password" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div><Button type="submit" className="w-full mt-2">{isSignUp ? "Create Account" : "Log In"}</Button></form><button onClick={() => setIsSignUp(!isSignUp)} className="mt-8 text-indigo-600 text-sm font-bold hover:text-indigo-800">{isSignUp ? "Log In Instead" : "Create an Account"}</button></div></div>;
 
@@ -1140,28 +1257,42 @@ return (
 
       </div>
 
-      {/* THE NEW BOTTOM NAVIGATION BAR */}
+      {/* THE NEW DYNAMIC BOTTOM NAVIGATION BAR */}
       <div className={`fixed bottom-0 left-0 right-0 z-50 transition-colors duration-500 ${activeTab === 'dadbod' ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'} backdrop-blur-xl border-t`}>
         <div className="max-w-md mx-auto flex justify-around p-2 pb-safe">
-          <button onClick={() => setActiveTab('family')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'family' ? 'text-indigo-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
-            <Home size={24} className={activeTab === 'family' ? 'fill-indigo-100' : ''} />
-            <span className="text-[10px] font-bold mt-1">Family</span>
-          </button>
-          <button onClick={() => setActiveTab('dadbod')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'dadbod' ? 'text-white' : 'text-slate-400'}`}>
-            <Activity size={24} className={activeTab === 'dadbod' ? 'fill-slate-700' : ''} />
-            <span className="text-[10px] font-bold mt-1">DadBod</span>
-          </button>
-          <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'finance' ? 'text-emerald-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
-            <Wallet size={24} className={activeTab === 'finance' ? 'fill-emerald-100' : ''} />
-            <span className="text-[10px] font-bold mt-1">Wallet</span>
-          </button>
+          {settings.tabOrder.map(tab => {
+            if (tab === 'family') return (
+              <button key="family" onClick={() => setActiveTab('family')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'family' ? 'text-indigo-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
+                <Home size={24} className={activeTab === 'family' ? 'fill-indigo-100' : ''} />
+                <span className="text-[10px] font-bold mt-1">Family</span>
+              </button>
+            );
+            if (tab === 'dadbod') return (
+              <button key="dadbod" onClick={() => setActiveTab('dadbod')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'dadbod' ? 'text-white' : 'text-slate-400'}`}>
+                <Activity size={24} className={activeTab === 'dadbod' ? 'fill-slate-700' : ''} />
+                <span className="text-[10px] font-bold mt-1">DadBod</span>
+              </button>
+            );
+            if (tab === 'finance') return (
+              <button key="finance" onClick={() => setActiveTab('finance')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'finance' ? 'text-emerald-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
+                <Wallet size={24} className={activeTab === 'finance' ? 'fill-emerald-100' : ''} />
+                <span className="text-[10px] font-bold mt-1">Wallet</span>
+              </button>
+            );
+            return null;
+          })}
         </div>
       </div>
 
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="App Settings">
         <div className="space-y-8">
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Units</h4><div className="bg-slate-50 p-5 rounded-[28px] space-y-5"><div className="flex justify-between items-center"><span className="font-bold text-slate-700">Temperature</span><div className="flex bg-slate-200/50 rounded-full p-1"><button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'C' })} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${settings.tempUnit === 'C' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>°C</button><button onClick={() => handleSaveSettings({ ...settings, tempUnit: 'F' })} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${settings.tempUnit === 'F' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>°F</button></div></div><div className="flex justify-between items-center"><span className="font-bold text-slate-700">Weight</span><div className="flex bg-slate-200/50 rounded-full p-1"><button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'kg' })} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${settings.weightUnit === 'kg' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>kg</button><button onClick={() => handleSaveSettings({ ...settings, weightUnit: 'lbs' })} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${settings.weightUnit === 'lbs' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>lbs</button></div></div></div></div>
+          
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Widgets</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.dashboardOrder.map((widget, idx) => (<div key={widget.id} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><button onClick={() => toggleWidgetVisibility(widget.id)} className={`p-2 rounded-full transition-colors ${widget.visible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>{widget.visible ? <Eye size={20} /> : <EyeOff size={20} />}</button><span className={`font-bold ${widget.visible ? 'text-slate-800' : 'text-slate-400'}`}>{widget.label}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveWidget(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.dashboardOrder.length - 1} onClick={() => moveWidget(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
+          
+          {/* NEW: Navigation Tabs Customization in Settings */}
+          <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Navigation Tabs</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.tabOrder.map((tab, idx) => (<div key={tab} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><span className="font-bold text-slate-800">{tab === 'family' ? 'Family Health' : tab === 'dadbod' ? 'Dad-Bod Mode' : 'Wallet'}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveTab(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.tabOrder.length - 1} onClick={() => moveTab(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
+
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Account</h4><Button variant="outline" onClick={handleExportData} className="w-full mb-3 !rounded-full"><Download size={18} /> Export Data (JSON)</Button><Button variant="danger" onClick={handleLogout} className="w-full !rounded-full"><LogOut size={18} /> Sign Out</Button></div>
         </div>
       </Modal>
