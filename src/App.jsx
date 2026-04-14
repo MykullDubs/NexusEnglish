@@ -334,10 +334,12 @@ function DadBodBanner({ user, showToast, askConfirm }) {
 
 // --- FINANCE TRACKER COMPONENT (MD3 Styled) ---
 function FinanceTracker({ user, showToast, askConfirm }) {
-  const [transactionType, setTransactionType] = useState('expense');
-  const [viewCurrency, setViewCurrency] = useState("MXN");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
+  const [transactionType, setTransactionType] = useState('expense'); 
+  const [viewCurrency, setViewCurrency] = useState("MXN"); 
+  const [amount, setAmount] = useState(""); 
+  const [note, setNote] = useState(""); 
+  const [exchangeRate, setExchangeRate] = useState(""); 
+  const [isQrOpen, setIsQrOpen] = useState(false); // NEW: QR Modal State
 
   const expenseCategories = [
     { name: "Food", icon: <Coffee size={16} />, color: "bg-orange-100 text-orange-700" },
@@ -370,116 +372,97 @@ function FinanceTracker({ user, showToast, askConfirm }) {
 
   useEffect(() => {
     if (!user) return;
-    
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const spendQuery = query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc"));
-    const unsubSpend = onSnapshot(spendQuery, (snapshot) => {
-      const logs = [];
+    const now = new Date(); const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()); const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const unsubSpend = onSnapshot(query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc")), (snapshot) => {
+      const logs = []; 
       const newTotals = { 
         expense: { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } },
         income:  { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } }
       };
-      
+
       snapshot.forEach((doc) => {
-        const data = doc.data();
+        const data = doc.data(); 
         const curr = data.currency || "USD"; 
-        const tType = data.type || "expense";
+        const tType = data.type || "expense"; 
         logs.push({ id: doc.id, ...data, currency: curr, type: tType });
         
-        if (data.timestamp && newTotals[tType] && newTotals[tType][curr]) {
-          const logDate = data.timestamp.toDate();
-          if (logDate >= startOfToday) newTotals[tType][curr].today += data.amount;
-          if (logDate >= startOfMonth) newTotals[tType][curr].month += data.amount;
+        if (data.timestamp && newTotals[tType] && newTotals[tType][curr]) { 
+          const logDate = data.timestamp.toDate(); 
+          if (logDate >= startOfToday) newTotals[tType][curr].today += data.amount; 
+          if (logDate >= startOfMonth) newTotals[tType][curr].month += data.amount; 
         }
       });
-      setSpendLogs(logs);
-      setTotals(newTotals);
+      setSpendLogs(logs); setTotals(newTotals);
     });
-
     return () => unsubSpend();
   }, [user]);
 
   const handleLogSpend = async (e) => {
-    e.preventDefault();
-    if (!user || !amount || isNaN(amount)) return;
+    e.preventDefault(); if (!user || !amount || isNaN(amount)) return;
     
-    const expenseData = {
-      amount: parseFloat(amount),
-      note: note || category,
-      category: category,
+    const expenseData = { 
+      amount: parseFloat(amount), 
+      note: note || category, 
+      category: category, 
       currency: viewCurrency,
       type: transactionType,
-      date: new Date().toLocaleString()
+      exchangeRate: parseFloat(exchangeRate) || "", 
+      date: new Date().toLocaleString() 
     };
 
-    const docRef = await addDoc(collection(db, `users/${user.uid}/finance`), {
-      amount: expenseData.amount,
-      note: expenseData.note,
-      category: expenseData.category,
+    const docRef = await addDoc(collection(db, `users/${user.uid}/finance`), { 
+      amount: expenseData.amount, 
+      note: expenseData.note, 
+      category: expenseData.category, 
       currency: expenseData.currency,
       type: expenseData.type,
-      timestamp: Timestamp.now()
+      exchangeRate: expenseData.exchangeRate,
+      timestamp: Timestamp.now() 
     });
     
-    const sheetsPayload = {
-      ...expenseData,
-      action: "add",
-      id: docRef.id
-    };
-
     try {
       await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sheetsPayload)
+        method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ ...expenseData, action: "add", id: docRef.id })
       });
-    } catch (err) {
-      console.error("Failed to sync to Google Sheets:", err);
-      showToast("Error syncing to Google Sheets", "error");
-    }
+    } catch (err) { console.error(err); showToast("Failed to sync to Google Sheets", "error"); }
     
-    setAmount("");
-    setNote("");
-    showToast(`${viewCurrency} ${transactionType === 'income' ? 'Income' : 'Expense'} logged!`, "success");
+    setAmount(""); setNote(""); setExchangeRate(""); showToast(`${viewCurrency} ${transactionType === 'income' ? 'Income' : 'Expense'} logged!`, "success");
   };
 
-  const handleDeleteSpend = (id) => {
-    askConfirm("Delete Transaction", "Remove this transaction from your timeline and spreadsheet?", async () => {
-      await deleteDoc(doc(db, `users/${user.uid}/finance`, id));
-      
+  const handleDeleteSpend = (id) => { 
+    askConfirm("Delete Transaction", "Remove this transaction from your timeline and spreadsheet?", async () => { 
+      await deleteDoc(doc(db, `users/${user.uid}/finance`, id)); 
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "delete", id: id })
+          method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", id: id })
         });
-      } catch (err) {
-        console.error("Failed to delete from Sheets", err);
-      }
-
-      showToast("Transaction deleted", "success");
-    });
+      } catch (err) { console.error("Failed to delete from Sheets", err); }
+      showToast("Transaction deleted", "success"); 
+    }); 
   };
 
-  const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
   const activeLogs = spendLogs.filter(log => log.type === transactionType && log.currency === viewCurrency && log.timestamp?.toDate() >= startOfToday);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-4">
-        
         <div className="flex flex-col gap-3 mb-2 pb-4 border-b border-emerald-50">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
+            
+            {/* NEW: Wallet Overview + QR Code Button */}
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
+              <button 
+                onClick={() => setIsQrOpen(true)} 
+                className="p-1.5 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors active:scale-95"
+              >
+                <QrCode size={18} />
+              </button>
+            </div>
+
             <div className="flex bg-slate-100 rounded-full p-1">
               <button onClick={() => setViewCurrency('MXN')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'MXN' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>MXN</button>
               <button onClick={() => setViewCurrency('USD')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'USD' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>USD</button>
@@ -493,63 +476,40 @@ function FinanceTracker({ user, showToast, askConfirm }) {
         </div>
 
         <div className="flex justify-between items-start">
-          <div>
-            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">{transactionType === 'income' ? "Today's Income" : "Today's Spend"}</p>
-            <h2 className={`text-4xl font-black tracking-tight ${transactionType === 'income' ? 'text-emerald-600' : 'text-emerald-950'}`}>
-              <span className="text-2xl opacity-60 mr-1">$</span>{totals[transactionType][viewCurrency].today.toFixed(2)}
-            </h2>
-          </div>
-          <div className="text-right">
-            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p>
-            <div className="text-xl font-bold text-slate-800">${totals[transactionType][viewCurrency].month.toFixed(2)}</div>
-          </div>
+          <div><p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">{transactionType === 'income' ? "Today's Income" : "Today's Spend"}</p><h2 className={`text-4xl font-black tracking-tight ${transactionType === 'income' ? 'text-emerald-600' : 'text-emerald-950'}`}><span className="text-2xl opacity-60 mr-1">$</span>{totals[transactionType][viewCurrency].today.toFixed(2)}</h2></div>
+          <div className="text-right"><p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p><div className="text-xl font-bold text-slate-800">${totals[transactionType][viewCurrency].month.toFixed(2)}</div></div>
         </div>
       </div>
 
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-6">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-full ${transactionType === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}><Wallet size={18} /></div>
-          <h2 className="text-lg font-bold text-slate-900">Quick {transactionType === 'income' ? 'Income' : 'Expense'}</h2>
-        </div>
-
+        <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${transactionType === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}><Wallet size={18} /></div><h2 className="text-lg font-bold text-slate-900">Quick {transactionType === 'income' ? 'Income' : 'Expense'}</h2></div>
         <form onSubmit={handleLogSpend} className="space-y-6">
-          <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center relative">
-            <span className="absolute left-6 text-xl font-black text-emerald-400">{viewCurrency} $</span>
-            <input 
-              type="number" 
-              step="0.01" 
-              placeholder="0.00" 
-              value={amount} 
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-12"
-            />
+          <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl flex items-center justify-center relative"><span className="absolute left-6 text-xl font-black text-emerald-400">{viewCurrency} $</span><input type="number" step="0.01" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-transparent text-center text-5xl font-black text-emerald-950 outline-none placeholder:text-slate-300 ml-12" /></div>
+          
+          <div className="flex gap-4">
+            <div className="flex-1 bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rate (MXN/USD)</label>
+              <div className="flex items-center mt-1">
+                <span className="text-slate-400 font-bold mr-1">$</span>
+                <input type="number" step="0.01" placeholder="e.g. 17.30" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} className="w-full bg-transparent font-bold text-slate-800 outline-none placeholder:text-slate-300" />
+              </div>
+            </div>
+            <div className="flex-1 bg-slate-50 border border-slate-100 p-3 rounded-2xl flex flex-col justify-center">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Converted</label>
+              <div className="font-bold text-emerald-600 mt-1">
+                {amount && exchangeRate && !isNaN(amount) && !isNaN(exchangeRate) 
+                  ? (viewCurrency === 'MXN' ? `$${(amount / exchangeRate).toFixed(2)} USD` : `$${(amount * exchangeRate).toFixed(2)} MXN`) 
+                  : "--"}
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {currentCategories.map(cat => (
-              <button 
-                key={cat.name} 
-                type="button" 
-                onClick={() => setCategory(cat.name)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all shrink-0 border-2
-                  ${category === cat.name ? `border-emerald-500 ${cat.color} shadow-sm` : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
-              >
-                {cat.icon} {cat.name}
-              </button>
-            ))}
+            {currentCategories.map(cat => (<button key={cat.name} type="button" onClick={() => setCategory(cat.name)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all shrink-0 border-2 ${category === cat.name ? `border-emerald-500 ${cat.color} shadow-sm` : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{cat.icon} {cat.name}</button>))}
           </div>
 
-          <input 
-            type="text" 
-            placeholder="What was it for? (Optional)" 
-            value={note} 
-            onChange={(e) => setNote(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-100 transition-colors outline-none"
-          />
-          
-          <button type="submit" disabled={!amount} className={`w-full text-white text-lg font-bold py-4 rounded-full shadow-md flex justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none ${transactionType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-900/20'}`}>
-            <Plus className="w-6 h-6" /> Add {viewCurrency} {transactionType === 'income' ? 'Income' : 'Expense'}
-          </button>
+          <input type="text" placeholder="What was it for? (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-100 transition-colors outline-none" />
+          <button type="submit" disabled={!amount} className={`w-full text-white text-lg font-bold py-4 rounded-full shadow-md flex justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none ${transactionType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-900/20'}`}><Plus className="w-6 h-6" /> Add {viewCurrency} {transactionType === 'income' ? 'Income' : 'Expense'}</button>
         </form>
 
         {activeLogs.length > 0 && (
@@ -560,17 +520,8 @@ function FinanceTracker({ user, showToast, askConfirm }) {
                 const catInfo = currentCategories.find(c => c.name === log.category) || currentCategories[currentCategories.length - 1];
                 return (
                   <div key={log.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-2xl transition-colors border border-transparent hover:border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${catInfo.color}`}>{catInfo.icon}</div>
-                      <div>
-                        <div className="font-bold text-slate-800">{log.note}</div>
-                        <div className="text-xs text-slate-400 font-medium">{formatTime(log.timestamp)}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className={`font-black text-lg ${transactionType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>${log.amount.toFixed(2)}</span>
-                      <button onClick={() => handleDeleteSpend(log.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button>
-                    </div>
+                    <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${catInfo.color}`}>{catInfo.icon}</div><div><div className="font-bold text-slate-800">{log.note}</div><div className="text-xs text-slate-400 font-medium">{log.timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {log.exchangeRate && `• Rate: $${log.exchangeRate}`}</div></div></div>
+                    <div className="flex items-center gap-4"><span className={`font-black text-lg ${transactionType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>${log.amount.toFixed(2)}</span><button onClick={() => handleDeleteSpend(log.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button></div>
                   </div>
                 );
               })}
@@ -578,6 +529,25 @@ function FinanceTracker({ user, showToast, askConfirm }) {
           </div>
         )}
       </div>
+
+      {/* NEW: QR CODE MODAL */}
+      <Modal isOpen={isQrOpen} onClose={() => setIsQrOpen(false)} title="School Pass">
+        <div className="flex flex-col items-center justify-center pb-4">
+          <div className="bg-slate-50 p-6 rounded-3xl w-full flex flex-col items-center border border-slate-100">
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 w-full flex justify-center">
+              {/* This looks for school-qr.png in your public folder. The onError ensures it doesn't look broken if the file is missing/named wrong */}
+              <img 
+                src="/school-qr.png" 
+                alt="School QR" 
+                className="w-full max-w-[250px] aspect-square object-contain" 
+                onError={(e) => { e.target.onerror = null; e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=Missing+Image+File'; }} 
+              />
+            </div>
+            <p className="text-sm font-bold text-slate-500 text-center uppercase tracking-widest">Ready to scan</p>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 }
