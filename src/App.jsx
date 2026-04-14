@@ -7,7 +7,7 @@ import {
   Eye, EyeOff, Download, GripHorizontal, Stethoscope,
   Bell, BellRing, Minus, Pencil, Droplet, Repeat, Check, User, ChevronDown, ChevronUp,
   Wallet, Coffee, Car, Home, ShoppingBag, Tag,
-  ArrowDownRight, ArrowUpRight, Briefcase, GraduationCap, Globe
+  ArrowDownRight, ArrowUpRight, Briefcase, GraduationCap, Globe, QrCode
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
