@@ -6,7 +6,8 @@ import {
   Utensils, Droplets, Bone, Settings, ArrowUp, ArrowDown, 
   Eye, EyeOff, Download, GripHorizontal, Stethoscope,
   Bell, BellRing, Minus, Pencil, Droplet, Repeat, Check, User, ChevronDown, ChevronUp,
-  Wallet, Coffee, Car, Home, ShoppingBag, Tag
+  Wallet, Coffee, Car, Home, ShoppingBag, Tag,
+  ArrowDownRight, ArrowUpRight, Briefcase, GraduationCap, Globe
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -333,21 +334,39 @@ function DadBodBanner({ user, showToast, askConfirm }) {
 
 // --- FINANCE TRACKER COMPONENT (MD3 Styled) ---
 function FinanceTracker({ user, showToast, askConfirm }) {
+  const [transactionType, setTransactionType] = useState('expense');
   const [viewCurrency, setViewCurrency] = useState("MXN");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [category, setCategory] = useState("Food");
-  
-  const [totals, setTotals] = useState({ USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } });
-  const [spendLogs, setSpendLogs] = useState([]);
 
-  const categories = [
+  const expenseCategories = [
     { name: "Food", icon: <Coffee size={16} />, color: "bg-orange-100 text-orange-700" },
     { name: "Transport", icon: <Car size={16} />, color: "bg-blue-100 text-blue-700" },
     { name: "Bills", icon: <Home size={16} />, color: "bg-purple-100 text-purple-700" },
     { name: "Shopping", icon: <ShoppingBag size={16} />, color: "bg-pink-100 text-pink-700" },
     { name: "Other", icon: <Tag size={16} />, color: "bg-slate-100 text-slate-700" }
   ];
+
+  const incomeCategories = [
+    { name: "TeachCast", icon: <Briefcase size={16} />, color: "bg-emerald-100 text-emerald-700" },
+    { name: "Carrot English", icon: <Globe size={16} />, color: "bg-orange-100 text-orange-700" },
+    { name: "Harmony School", icon: <GraduationCap size={16} />, color: "bg-indigo-100 text-indigo-700" },
+    { name: "Other", icon: <Plus size={16} />, color: "bg-slate-100 text-slate-700" }
+  ];
+
+  const currentCategories = transactionType === 'expense' ? expenseCategories : incomeCategories;
+  const [category, setCategory] = useState(expenseCategories[0].name);
+
+  useEffect(() => {
+    setCategory(currentCategories[0].name);
+  }, [transactionType]);
+  
+  const [totals, setTotals] = useState({ 
+    expense: { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } },
+    income:  { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } }
+  });
+  
+  const [spendLogs, setSpendLogs] = useState([]);
 
   useEffect(() => {
     if (!user) return;
@@ -359,17 +378,21 @@ function FinanceTracker({ user, showToast, askConfirm }) {
     const spendQuery = query(collection(db, `users/${user.uid}/finance`), orderBy("timestamp", "desc"));
     const unsubSpend = onSnapshot(spendQuery, (snapshot) => {
       const logs = [];
-      const newTotals = { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } };
+      const newTotals = { 
+        expense: { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } },
+        income:  { USD: { today: 0, month: 0 }, MXN: { today: 0, month: 0 } }
+      };
       
       snapshot.forEach((doc) => {
         const data = doc.data();
         const curr = data.currency || "USD"; 
-        logs.push({ id: doc.id, ...data, currency: curr });
+        const tType = data.type || "expense";
+        logs.push({ id: doc.id, ...data, currency: curr, type: tType });
         
-        if (data.timestamp && newTotals[curr]) {
+        if (data.timestamp && newTotals[tType] && newTotals[tType][curr]) {
           const logDate = data.timestamp.toDate();
-          if (logDate >= startOfToday) newTotals[curr].today += data.amount;
-          if (logDate >= startOfMonth) newTotals[curr].month += data.amount;
+          if (logDate >= startOfToday) newTotals[tType][curr].today += data.amount;
+          if (logDate >= startOfMonth) newTotals[tType][curr].month += data.amount;
         }
       });
       setSpendLogs(logs);
@@ -379,7 +402,7 @@ function FinanceTracker({ user, showToast, askConfirm }) {
     return () => unsubSpend();
   }, [user]);
 
- const handleLogSpend = async (e) => {
+  const handleLogSpend = async (e) => {
     e.preventDefault();
     if (!user || !amount || isNaN(amount)) return;
     
@@ -388,26 +411,25 @@ function FinanceTracker({ user, showToast, askConfirm }) {
       note: note || category,
       category: category,
       currency: viewCurrency,
+      type: transactionType,
       date: new Date().toLocaleString()
     };
 
-    // 1. Save to Firebase first so it generates a unique ID
     const docRef = await addDoc(collection(db, `users/${user.uid}/finance`), {
       amount: expenseData.amount,
       note: expenseData.note,
       category: expenseData.category,
       currency: expenseData.currency,
+      type: expenseData.type,
       timestamp: Timestamp.now()
     });
     
-    // 2. Package it up with the "add" command and the new ID
     const sheetsPayload = {
       ...expenseData,
       action: "add",
       id: docRef.id
     };
 
-    // 3. Fire it to Google Sheets
     try {
       await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
         method: "POST",
@@ -422,15 +444,13 @@ function FinanceTracker({ user, showToast, askConfirm }) {
     
     setAmount("");
     setNote("");
-    showToast(`${viewCurrency} Expense logged!`, "success");
+    showToast(`${viewCurrency} ${transactionType === 'income' ? 'Income' : 'Expense'} logged!`, "success");
   };
 
   const handleDeleteSpend = (id) => {
-    askConfirm("Delete Expense", "Remove this transaction from your timeline and spreadsheet?", async () => {
-      // 1. Delete from Firebase
+    askConfirm("Delete Transaction", "Remove this transaction from your timeline and spreadsheet?", async () => {
       await deleteDoc(doc(db, `users/${user.uid}/finance`, id));
       
-      // 2. Send the "delete" command to Google Sheets
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxSPTYefuWTRS2hOLdTG1xFaFyeR89giyxbBdUAM6rPJOGJY37ZIZWcKDvKu6EptU3lpg/exec", {
           method: "POST",
@@ -442,45 +462,54 @@ function FinanceTracker({ user, showToast, askConfirm }) {
         console.error("Failed to delete from Sheets", err);
       }
 
-      showToast("Expense deleted", "success");
+      showToast("Transaction deleted", "success");
     });
   };
 
   const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const todaysLogs = spendLogs.filter(log => log.currency === viewCurrency && log.timestamp?.toDate() >= startOfToday);
+  
+  const activeLogs = spendLogs.filter(log => log.type === transactionType && log.currency === viewCurrency && log.timestamp?.toDate() >= startOfToday);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
       
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-4">
-        <div className="flex justify-between items-center mb-2 pb-4 border-b border-emerald-50">
-          <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
-          <div className="flex bg-slate-100 rounded-full p-1">
-            <button onClick={() => setViewCurrency('MXN')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'MXN' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>MXN</button>
-            <button onClick={() => setViewCurrency('USD')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'USD' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>USD</button>
+        
+        <div className="flex flex-col gap-3 mb-2 pb-4 border-b border-emerald-50">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-slate-900">Wallet Overview</h2>
+            <div className="flex bg-slate-100 rounded-full p-1">
+              <button onClick={() => setViewCurrency('MXN')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'MXN' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>MXN</button>
+              <button onClick={() => setViewCurrency('USD')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${viewCurrency === 'USD' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>USD</button>
+            </div>
+          </div>
+          
+          <div className="flex bg-slate-100 rounded-full p-1 w-full">
+            <button onClick={() => setTransactionType('expense')} className={`flex-1 flex justify-center items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${transactionType === 'expense' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><ArrowDownRight size={16}/> Expense</button>
+            <button onClick={() => setTransactionType('income')} className={`flex-1 flex justify-center items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${transactionType === 'income' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><ArrowUpRight size={16}/> Income</button>
           </div>
         </div>
 
         <div className="flex justify-between items-start">
           <div>
-            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">Today's Spend</p>
-            <h2 className="text-4xl font-black text-emerald-950 tracking-tight">
-              <span className="text-2xl text-emerald-600 mr-1">$</span>{totals[viewCurrency].today.toFixed(2)}
+            <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">{transactionType === 'income' ? "Today's Income" : "Today's Spend"}</p>
+            <h2 className={`text-4xl font-black tracking-tight ${transactionType === 'income' ? 'text-emerald-600' : 'text-emerald-950'}`}>
+              <span className="text-2xl opacity-60 mr-1">$</span>{totals[transactionType][viewCurrency].today.toFixed(2)}
             </h2>
           </div>
           <div className="text-right">
             <p className="text-slate-500 text-sm font-bold mb-1 uppercase tracking-wider">This Month</p>
-            <div className="text-xl font-bold text-slate-800">${totals[viewCurrency].month.toFixed(2)}</div>
+            <div className="text-xl font-bold text-slate-800">${totals[transactionType][viewCurrency].month.toFixed(2)}</div>
           </div>
         </div>
       </div>
 
       <div className="bg-white border border-emerald-100 p-6 rounded-[28px] shadow-sm space-y-6">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-100 text-emerald-700 rounded-full"><Wallet size={18} /></div>
-          <h2 className="text-lg font-bold text-slate-900">Quick Expense</h2>
+          <div className={`p-2 rounded-full ${transactionType === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}><Wallet size={18} /></div>
+          <h2 className="text-lg font-bold text-slate-900">Quick {transactionType === 'income' ? 'Income' : 'Expense'}</h2>
         </div>
 
         <form onSubmit={handleLogSpend} className="space-y-6">
@@ -497,7 +526,7 @@ function FinanceTracker({ user, showToast, askConfirm }) {
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {categories.map(cat => (
+            {currentCategories.map(cat => (
               <button 
                 key={cat.name} 
                 type="button" 
@@ -518,17 +547,17 @@ function FinanceTracker({ user, showToast, askConfirm }) {
             className="w-full bg-slate-50 border border-slate-100 rounded-full px-5 py-4 text-slate-800 focus:bg-slate-100 transition-colors outline-none"
           />
           
-          <button type="submit" disabled={!amount} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-lg font-bold py-4 rounded-full shadow-md shadow-emerald-600/20 flex justify-center gap-2 transition-all active:scale-95">
-            <Plus className="w-6 h-6" /> Add {viewCurrency} Expense
+          <button type="submit" disabled={!amount} className={`w-full text-white text-lg font-bold py-4 rounded-full shadow-md flex justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none ${transactionType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-900/20'}`}>
+            <Plus className="w-6 h-6" /> Add {viewCurrency} {transactionType === 'income' ? 'Income' : 'Expense'}
           </button>
         </form>
 
-        {todaysLogs.length > 0 && (
+        {activeLogs.length > 0 && (
           <div className="pt-6 border-t border-slate-100">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 ml-2">Today's Transactions ({viewCurrency})</h3>
             <div className="space-y-2">
-              {todaysLogs.map(log => {
-                const catInfo = categories.find(c => c.name === log.category) || categories[4];
+              {activeLogs.map(log => {
+                const catInfo = currentCategories.find(c => c.name === log.category) || currentCategories[currentCategories.length - 1];
                 return (
                   <div key={log.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-2xl transition-colors border border-transparent hover:border-slate-100">
                     <div className="flex items-center gap-3">
@@ -539,7 +568,7 @@ function FinanceTracker({ user, showToast, askConfirm }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="font-black text-lg text-emerald-700">${log.amount.toFixed(2)}</span>
+                      <span className={`font-black text-lg ${transactionType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>${log.amount.toFixed(2)}</span>
                       <button onClick={() => handleDeleteSpend(log.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"><Trash2 size={16} /></button>
                     </div>
                   </div>
