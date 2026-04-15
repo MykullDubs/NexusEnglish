@@ -7,7 +7,7 @@ import {
   Eye, EyeOff, Download, GripHorizontal, Stethoscope,
   Bell, BellRing, Minus, Pencil, Droplet, Repeat, Check, User, ChevronDown, ChevronUp,
   Wallet, Coffee, Car, Home, ShoppingBag, Tag,
-  ArrowDownRight, ArrowUpRight, Briefcase, GraduationCap, Globe, QrCode
+  ArrowDownRight, ArrowUpRight, Briefcase, GraduationCap, Globe, QrCode, ChefHat
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -51,7 +51,7 @@ const calculateAge = (dob) => {
   return `${years}y`;
 };
 
-// --- Components (MD3 Styled) ---
+// --- Components ---
 const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button', disabled = false }) => {
   const baseStyle = "px-6 py-3.5 rounded-full font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed tracking-wide";
   const variants = {
@@ -69,14 +69,8 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
 };
 
 const RollerInput = ({ value, onChange, step = 1, min = 0, max = 999, unit = '', label = '' }) => {
-  const handleIncrement = () => {
-    const current = parseFloat(value) || 0;
-    if (current + step <= max) onChange((current + step).toFixed(step < 1 ? 1 : 0));
-  };
-  const handleDecrement = () => {
-    const current = parseFloat(value) || 0;
-    if (current - step >= min) onChange((current - step).toFixed(step < 1 ? 1 : 0));
-  };
+  const handleIncrement = () => { const current = parseFloat(value) || 0; if (current + step <= max) onChange((current + step).toFixed(step < 1 ? 1 : 0)); };
+  const handleDecrement = () => { const current = parseFloat(value) || 0; if (current - step >= min) onChange((current - step).toFixed(step < 1 ? 1 : 0)); };
   return (
     <div className="flex flex-col gap-1.5">
       {label && <label className="text-sm font-medium text-slate-600 ml-1">{label}</label>}
@@ -93,238 +87,85 @@ const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-        <div className="p-6 flex justify-between items-center bg-white">
-          <h3 className="font-bold text-xl text-slate-900">{title}</h3>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500"><X size={24} /></button>
-        </div>
-        <div className="p-6 pt-0 overflow-y-auto flex-1">{children}</div>
-      </div>
+      <div className="bg-white rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"><div className="p-6 flex justify-between items-center bg-white"><h3 className="font-bold text-xl text-slate-900">{title}</h3><button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500"><X size={24} /></button></div><div className="p-6 pt-0 overflow-y-auto flex-1">{children}</div></div>
     </div>
   );
 };
 
 const SimpleLineChart = ({ data, colorHex, unit, title }) => {
-  if (!data || data.length < 2) {
-    return (
-      <div className="bg-slate-50 p-6 rounded-[28px] text-center">
-        <h4 className="text-slate-600 font-medium mb-2">{title}</h4>
-        <div className="text-slate-400 text-sm">Not enough data points yet</div>
-      </div>
-    );
-  }
-  const values = data.map(d => parseFloat(d.value));
-  const minVal = Math.min(...values) * 0.95;
-  const maxVal = Math.max(...values) * 1.05;
-  const range = maxVal - minVal || 1;
-  const dates = data.map(d => new Date(d.date).getTime());
-  const minDate = Math.min(...dates);
-  const maxDate = Math.max(...dates);
-  const dateRange = maxDate - minDate || 1;
-  const width = 100;
-  const height = 50;
-  const padding = 2;
-  const points = data.map(d => {
-    const x = ((new Date(d.date).getTime() - minDate) / dateRange) * (width - padding * 2) + padding;
-    const y = height - (((parseFloat(d.value) - minVal) / range) * (height - padding * 2) + padding);
-    return `${x},${y}`;
-  }).join(' ');
+  if (!data || data.length < 2) return (<div className="bg-slate-50 p-6 rounded-[28px] text-center"><h4 className="text-slate-600 font-medium mb-2">{title}</h4><div className="text-slate-400 text-sm">Not enough data points yet</div></div>);
+  const values = data.map(d => parseFloat(d.value)); const minVal = Math.min(...values) * 0.95; const maxVal = Math.max(...values) * 1.05; const range = maxVal - minVal || 1;
+  const dates = data.map(d => new Date(d.date).getTime()); const minDate = Math.min(...dates); const maxDate = Math.max(...dates); const dateRange = maxDate - minDate || 1;
+  const width = 100; const height = 50; const padding = 2;
+  const points = data.map(d => { const x = ((new Date(d.date).getTime() - minDate) / dateRange) * (width - padding * 2) + padding; const y = height - (((parseFloat(d.value) - minVal) / range) * (height - padding * 2) + padding); return `${x},${y}`; }).join(' ');
   return (
     <div className="bg-slate-50 p-5 rounded-[28px]">
-      <div className="flex justify-between items-end mb-4">
-        <h4 className="font-bold text-slate-800">{title}</h4>
-        <span className="text-sm font-medium text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm">Last: {data[data.length-1].value}{unit}</span>
-      </div>
-      <div className="relative aspect-[2/1] w-full">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
-          <line x1="0" y1="0" x2={width} y2="0" stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="2" />
-          <line x1="0" y1={height/2} x2={width} y2={height/2} stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="2"/>
-          <line x1="0" y1={height} x2={width} y2={height} stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="2"/>
-          <polyline fill="none" stroke={colorHex} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-          {data.map((d, i) => {
-             const x = ((new Date(d.date).getTime() - minDate) / dateRange) * (width - padding * 2) + padding;
-             const y = height - (((parseFloat(d.value) - minVal) / range) * (height - padding * 2) + padding);
-             return <circle key={i} cx={x} cy={y} r="2" fill="white" stroke={colorHex} strokeWidth="1.5" />;
-          })}
-        </svg>
-      </div>
-      <div className="flex justify-between text-xs text-slate-400 font-medium mt-3">
-        <span>{new Date(minDate).toLocaleDateString([], {month:'short', day:'numeric'})}</span>
-        <span>{new Date(maxDate).toLocaleDateString([], {month:'short', day:'numeric'})}</span>
-      </div>
+      <div className="flex justify-between items-end mb-4"><h4 className="font-bold text-slate-800">{title}</h4><span className="text-sm font-medium text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm">Last: {data[data.length-1].value}{unit}</span></div>
+      <div className="relative aspect-[2/1] w-full"><svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible"><line x1="0" y1="0" x2={width} y2="0" stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="2" /><line x1="0" y1={height/2} x2={width} y2={height/2} stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="2"/><line x1="0" y1={height} x2={width} y2={height} stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="2"/><polyline fill="none" stroke={colorHex} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />{data.map((d, i) => { const x = ((new Date(d.date).getTime() - minDate) / dateRange) * (width - padding * 2) + padding; const y = height - (((parseFloat(d.value) - minVal) / range) * (height - padding * 2) + padding); return <circle key={i} cx={x} cy={y} r="2" fill="white" stroke={colorHex} strokeWidth="1.5" />; })}</svg></div>
+      <div className="flex justify-between text-xs text-slate-400 font-medium mt-3"><span>{new Date(minDate).toLocaleDateString([], {month:'short', day:'numeric'})}</span><span>{new Date(maxDate).toLocaleDateString([], {month:'short', day:'numeric'})}</span></div>
     </div>
   );
 };
 
-// --- DAD-BOD BANNER (Top Header) ---
+// --- DAD-BOD BANNER ---
 function DadBodBanner({ user, showToast, askConfirm }) {
-  const [eatStart, setEatStart] = useState("12:00");
-  const [eatEnd, setEatEnd] = useState("20:00");
-  const [waterCount, setWaterCount] = useState(0);
-  const [timeLeft, setTimeLeft] = useState("--:--");
-  const [isFasting, setIsFasting] = useState(true);
-  const [habits, setHabits] = useState([]);
-  const [showHabits, setShowHabits] = useState(false);
-  const [newHabitName, setNewHabitName] = useState("");
+  const [eatStart, setEatStart] = useState("12:00"); const [eatEnd, setEatEnd] = useState("20:00");
+  const [waterCount, setWaterCount] = useState(0); const [timeLeft, setTimeLeft] = useState("--:--");
+  const [isFasting, setIsFasting] = useState(true); const [habits, setHabits] = useState([]);
+  const [showHabits, setShowHabits] = useState(false); const [newHabitName, setNewHabitName] = useState("");
 
   useEffect(() => {
     if (!user) return;
-    const settingsRef = doc(db, `users/${user.uid}/settings/dadbod`);
-    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        if (docSnap.data().eatStart) setEatStart(docSnap.data().eatStart);
-        if (docSnap.data().eatEnd) setEatEnd(docSnap.data().eatEnd);
-      }
-    });
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const waterRef = doc(db, `users/${user.uid}/water`, todayStr);
-    const unsubWater = onSnapshot(waterRef, (docSnap) => {
-      if (docSnap.exists()) setWaterCount(docSnap.data().count || 0);
-      else setWaterCount(0);
-    });
-
-    const habitsQuery = query(collection(db, `users/${user.uid}/habits`), orderBy("createdAt", "asc"));
-    const unsubHabits = onSnapshot(habitsQuery, (snapshot) => {
-      const h = []; snapshot.forEach(doc => h.push({ id: doc.id, ...doc.data() })); setHabits(h);
-    });
-
+    const unsubSettings = onSnapshot(doc(db, `users/${user.uid}/settings/dadbod`), (docSnap) => { if (docSnap.exists()) { if (docSnap.data().eatStart) setEatStart(docSnap.data().eatStart); if (docSnap.data().eatEnd) setEatEnd(docSnap.data().eatEnd); } });
+    const unsubWater = onSnapshot(doc(db, `users/${user.uid}/water`, new Date().toISOString().split('T')[0]), (docSnap) => { if (docSnap.exists()) setWaterCount(docSnap.data().count || 0); else setWaterCount(0); });
+    const unsubHabits = onSnapshot(query(collection(db, `users/${user.uid}/habits`), orderBy("createdAt", "asc")), (snapshot) => { const h = []; snapshot.forEach(doc => h.push({ id: doc.id, ...doc.data() })); setHabits(h); });
     return () => { unsubSettings(); unsubWater(); unsubHabits(); };
   }, [user]);
 
   useEffect(() => {
     const updateTimer = () => {
-      const now = new Date();
-      const [sH, sM] = eatStart.split(':').map(Number);
-      const [eH, eM] = eatEnd.split(':').map(Number);
-      let start = new Date(now); start.setHours(sH, sM, 0, 0);
-      let end = new Date(now); end.setHours(eH, eM, 0, 0);
+      const now = new Date(); const [sH, sM] = eatStart.split(':').map(Number); const [eH, eM] = eatEnd.split(':').map(Number);
+      let start = new Date(now); start.setHours(sH, sM, 0, 0); let end = new Date(now); end.setHours(eH, eM, 0, 0);
       let fasting = true; let target = null;
-
-      if (start < end) {
-        if (now < start) { fasting = true; target = start; }
-        else if (now >= start && now < end) { fasting = false; target = end; }
-        else { fasting = true; target = new Date(start); target.setDate(target.getDate() + 1); }
-      } else {
-        if (now >= start) { fasting = false; target = new Date(end); target.setDate(target.getDate() + 1); }
-        else if (now < end) { fasting = false; target = end; }
-        else { fasting = true; target = start; }
-      }
-
-      setIsFasting(fasting);
-      const diffMs = target - now;
-      const h = Math.floor(diffMs / (1000 * 60 * 60));
-      const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      const formattedTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      setTimeLeft(`${formattedTime} until fast ${fasting ? 'ends' : 'starts'}`);
+      if (start < end) { if (now < start) { fasting = true; target = start; } else if (now >= start && now < end) { fasting = false; target = end; } else { fasting = true; target = new Date(start); target.setDate(target.getDate() + 1); } } 
+      else { if (now >= start) { fasting = false; target = new Date(end); target.setDate(target.getDate() + 1); } else if (now < end) { fasting = false; target = end; } else { fasting = true; target = start; } }
+      setIsFasting(fasting); const diffMs = target - now; const h = Math.floor(diffMs / (1000 * 60 * 60)); const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      setTimeLeft(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} until fast ${fasting ? 'ends' : 'starts'}`);
     };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 60000);
-    return () => clearInterval(interval);
+    updateTimer(); const interval = setInterval(updateTimer, 60000); return () => clearInterval(interval);
   }, [eatStart, eatEnd]);
 
-  const handleAddWater = async () => {
-    if (!user) return; const todayStr = new Date().toISOString().split('T')[0];
-    await setDoc(doc(db, `users/${user.uid}/water`, todayStr), { count: Math.min(waterCount + 1, 8) }, { merge: true });
-  };
-  const handleRemoveWater = async () => {
-    if (!user || waterCount === 0) return; const todayStr = new Date().toISOString().split('T')[0];
-    await setDoc(doc(db, `users/${user.uid}/water`, todayStr), { count: waterCount - 1 }, { merge: true });
-  };
-
-  const handleAddHabit = async (e) => {
-    e.preventDefault(); if (!newHabitName.trim() || !user) return;
-    await addDoc(collection(db, `users/${user.uid}/habits`), { name: newHabitName, completedDates: [], createdAt: Timestamp.now() });
-    setNewHabitName("");
-    showToast("Habit tracked!", "success");
-  };
-  const toggleHabitDate = async (habit, dateStr) => {
-    let updatedDates = [...(habit.completedDates || [])];
-    if (updatedDates.includes(dateStr)) updatedDates = updatedDates.filter(d => d !== dateStr);
-    else updatedDates.push(dateStr);
-    await updateDoc(doc(db, `users/${user.uid}/habits`, habit.id), { completedDates: updatedDates });
-  };
-  const handleDeleteHabit = (id) => { 
-    askConfirm("Delete Habit", "Are you sure you want to stop tracking this habit?", async () => {
-      await deleteDoc(doc(db, `users/${user.uid}/habits`, id));
-      showToast("Habit deleted", "success");
-    });
-  };
-
-  const getLocalYYYYMMDD = (date) => {
-    const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
+  const handleAddWater = async () => { if (!user) return; await setDoc(doc(db, `users/${user.uid}/water`, new Date().toISOString().split('T')[0]), { count: Math.min(waterCount + 1, 8) }, { merge: true }); };
+  const handleRemoveWater = async () => { if (!user || waterCount === 0) return; await setDoc(doc(db, `users/${user.uid}/water`, new Date().toISOString().split('T')[0]), { count: waterCount - 1 }, { merge: true }); };
+  const handleAddHabit = async (e) => { e.preventDefault(); if (!newHabitName.trim() || !user) return; await addDoc(collection(db, `users/${user.uid}/habits`), { name: newHabitName, completedDates: [], createdAt: Timestamp.now() }); setNewHabitName(""); showToast("Habit tracked!", "success"); };
+  const toggleHabitDate = async (habit, dateStr) => { let updatedDates = [...(habit.completedDates || [])]; if (updatedDates.includes(dateStr)) updatedDates = updatedDates.filter(d => d !== dateStr); else updatedDates.push(dateStr); await updateDoc(doc(db, `users/${user.uid}/habits`, habit.id), { completedDates: updatedDates }); };
+  const handleDeleteHabit = (id) => { askConfirm("Delete Habit", "Are you sure you want to stop tracking this habit?", async () => { await deleteDoc(doc(db, `users/${user.uid}/habits`, id)); showToast("Habit deleted", "success"); }); };
 
   const last7Days = useMemo(() => {
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
-      days.push({ dateStr: getLocalYYYYMMDD(d), dayName: d.toLocaleDateString([], { weekday: 'short' }).charAt(0), dayNum: d.getDate() });
-    }
-    return days;
+    const days = []; for (let i = 6; i >= 0; i--) { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i); days.push({ dateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, dayName: d.toLocaleDateString([], { weekday: 'short' }).charAt(0), dayNum: d.getDate() }); } return days;
   }, []);
 
   return (
     <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
-      <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Clock size={18} className="text-white/80" />
-          <span className="text-sm font-bold text-white tracking-wide">{timeLeft}</span>
-        </div>
-        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isFasting ? 'bg-amber-400/20 text-amber-200' : 'bg-emerald-400/20 text-emerald-200'}`}>
-          {isFasting ? 'Fasting' : 'Eating'}
-        </div>
-      </div>
-
+      <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex items-center justify-between"><div className="flex items-center gap-3"><Clock size={18} className="text-white/80" /><span className="text-sm font-bold text-white tracking-wide">{timeLeft}</span></div><div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isFasting ? 'bg-amber-400/20 text-amber-200' : 'bg-emerald-400/20 text-emerald-200'}`}>{isFasting ? 'Fasting' : 'Eating'}</div></div>
+      <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2"><div className="flex justify-between items-center"><span className="text-xs font-bold text-white/70 uppercase tracking-widest">Daily Water</span><span className="text-xs font-bold text-white/90">{waterCount} / 8</span></div><div className="flex justify-between items-center gap-1">{[...Array(8)].map((_, i) => (<button key={i} onClick={i < waterCount ? handleRemoveWater : handleAddWater} className="p-1 active:scale-90 transition-transform"><Droplet size={24} className={i < waterCount ? "text-blue-400 fill-blue-400 drop-shadow-md" : "text-white/20"} /></button>))}</div></div>
       <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2">
-        <div className="flex justify-between items-center">
-          <span className="text-xs font-bold text-white/70 uppercase tracking-widest">Daily Water</span>
-          <span className="text-xs font-bold text-white/90">{waterCount} / 8</span>
-        </div>
-        <div className="flex justify-between items-center gap-1">
-          {[...Array(8)].map((_, i) => (
-            <button key={i} onClick={i < waterCount ? handleRemoveWater : handleAddWater} className="p-1 active:scale-90 transition-transform">
-              <Droplet size={24} className={i < waterCount ? "text-blue-400 fill-blue-400 drop-shadow-md" : "text-white/20"} />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2">
-        <button onClick={() => setShowHabits(!showHabits)} className="w-full flex justify-between items-center text-sm font-bold text-white transition-colors">
-          <div className="flex items-center gap-2"><Activity size={16} className="text-emerald-400" /> Streaks & Habits</div>
-          {showHabits ? <ChevronUp size={16} className="text-white/60" /> : <ChevronDown size={16} className="text-white/60" />}
-        </button>
-
+        <button onClick={() => setShowHabits(!showHabits)} className="w-full flex justify-between items-center text-sm font-bold text-white transition-colors"><div className="flex items-center gap-2"><Activity size={16} className="text-emerald-400" /> Streaks & Habits</div>{showHabits ? <ChevronUp size={16} className="text-white/60" /> : <ChevronDown size={16} className="text-white/60" />}</button>
         {showHabits && (
           <div className="mt-4 space-y-5 animate-in slide-in-from-top-2">
             {habits.length === 0 && <p className="text-xs text-white/50 text-center italic">No habits added yet.</p>}
             {habits.map(habit => (
               <div key={habit.id} className="space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-sm font-bold text-white/90">{habit.name}</span>
-                  <button onClick={() => handleDeleteHabit(habit.id)} className="text-white/30 hover:text-red-400 transition-colors p-1"><Trash2 size={14} /></button>
-                </div>
+                <div className="flex justify-between items-center px-1"><span className="text-sm font-bold text-white/90">{habit.name}</span><button onClick={() => handleDeleteHabit(habit.id)} className="text-white/30 hover:text-red-400 transition-colors p-1"><Trash2 size={14} /></button></div>
                 <div className="flex justify-between gap-1.5">
                   {last7Days.map(({ dateStr, dayName, dayNum }) => {
-                    const isCompleted = (habit.completedDates || []).includes(dateStr);
-                    const isToday = dateStr === getLocalYYYYMMDD(new Date());
-                    return (
-                      <button key={dateStr} onClick={() => toggleHabitDate(habit, dateStr)} className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-xl border transition-all active:scale-95 ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' : isToday ? 'bg-white/10 border-emerald-400/50 text-white/70 border-dashed' : 'bg-black/20 border-transparent text-white/30 hover:bg-white/10'}`}>
-                        <span className="text-[10px] font-bold uppercase">{dayName}</span>
-                        <span className={`text-sm font-black ${isCompleted ? 'text-white' : 'text-white/80'}`}>{dayNum}</span>
-                      </button>
-                    );
+                    const isCompleted = (habit.completedDates || []).includes(dateStr); const isToday = dateStr === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+                    return (<button key={dateStr} onClick={() => toggleHabitDate(habit, dateStr)} className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-xl border transition-all active:scale-95 ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' : isToday ? 'bg-white/10 border-emerald-400/50 text-white/70 border-dashed' : 'bg-black/20 border-transparent text-white/30 hover:bg-white/10'}`}><span className="text-[10px] font-bold uppercase">{dayName}</span><span className={`text-sm font-black ${isCompleted ? 'text-white' : 'text-white/80'}`}>{dayNum}</span></button>);
                   })}
                 </div>
               </div>
             ))}
-            <form onSubmit={handleAddHabit} className="flex gap-2 pt-2">
-              <input type="text" placeholder="e.g. No Energy Drinks" value={newHabitName} onChange={(e) => setNewHabitName(e.target.value)} className="flex-1 bg-black/20 border-none rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-emerald-400" />
-              <button type="submit" disabled={!newHabitName.trim()} className="bg-emerald-500 disabled:bg-white/10 disabled:text-white/30 text-white px-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center"><Plus size={18} /></button>
-            </form>
+            <form onSubmit={handleAddHabit} className="flex gap-2 pt-2"><input type="text" placeholder="e.g. No Energy Drinks" value={newHabitName} onChange={(e) => setNewHabitName(e.target.value)} className="flex-1 bg-black/20 border-none rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-emerald-400" /><button type="submit" disabled={!newHabitName.trim()} className="bg-emerald-500 disabled:bg-white/10 disabled:text-white/30 text-white px-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center"><Plus size={18} /></button></form>
           </div>
         )}
       </div>
@@ -332,7 +173,118 @@ function DadBodBanner({ user, showToast, askConfirm }) {
   );
 }
 
-// --- FINANCE TRACKER COMPONENT (MD3 Styled) ---
+// --- MEAL PLANNER COMPONENT (NEW!) ---
+function MealPlanner({ user, showToast }) {
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const [plan, setPlan] = useState({});
+  const [editingDay, setEditingDay] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editCals, setEditCals] = useState("");
+
+  const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, `users/${user.uid}/mealPlan/current`), (docSnap) => {
+      if (docSnap.exists()) setPlan(docSnap.data());
+      else setPlan({});
+    });
+    return () => unsub();
+  }, [user]);
+
+  const handleSaveDay = async (e) => {
+    e.preventDefault();
+    if (!user || !editingDay) return;
+    await setDoc(doc(db, `users/${user.uid}/mealPlan/current`), {
+      [editingDay]: { name: editName, cals: editCals }
+    }, { merge: true });
+    setEditingDay(null);
+    showToast(`${editingDay} meal saved!`, "success");
+  };
+
+  const openEdit = (day) => {
+    setEditingDay(day);
+    setEditName(plan[day]?.name || "");
+    setEditCals(plan[day]?.cals || "");
+  };
+
+  const handleLogToDadBod = async (mealName, cals) => {
+    if(!user || !cals) return;
+    await addDoc(collection(db, `users/${user.uid}/calories`), { 
+      amount: Number(cals), 
+      note: mealName || "Planned Meal", 
+      timestamp: Timestamp.now() 
+    });
+    showToast("Logged to Dad-Bod!", "success");
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
+      <div className="bg-white border border-orange-100 p-6 rounded-[28px] shadow-sm flex items-center gap-4">
+        <div className="p-4 bg-orange-100 text-orange-600 rounded-full"><ChefHat size={32} /></div>
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Weekly Meals</h2>
+          <p className="text-slate-500 font-medium text-sm">Plan ahead, stay on track.</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {daysOfWeek.map(day => {
+          const isToday = day === todayName;
+          const dayPlan = plan[day] || { name: "", cals: "" };
+          const hasMeal = dayPlan.name.trim() !== "";
+
+          return (
+            <div key={day} className={`bg-white rounded-3xl overflow-hidden transition-all ${isToday ? 'ring-2 ring-orange-500 shadow-md' : 'border border-slate-100 shadow-sm'}`}>
+              
+              {/* Day Header */}
+              <div className={`px-5 py-3 flex justify-between items-center cursor-pointer ${isToday ? 'bg-orange-50' : 'bg-slate-50'}`} onClick={() => openEdit(day)}>
+                <div className="flex items-center gap-2">
+                  <span className={`font-black uppercase tracking-widest text-xs ${isToday ? 'text-orange-600' : 'text-slate-400'}`}>{day}</span>
+                  {isToday && <span className="bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">Today</span>}
+                </div>
+                <button className="text-slate-400 hover:text-orange-500 p-1 transition-colors"><Pencil size={14}/></button>
+              </div>
+
+              {/* Day Content */}
+              {editingDay === day ? (
+                <form onSubmit={handleSaveDay} className="p-4 space-y-3 border-t border-slate-100 bg-white animate-in slide-in-from-top-2">
+                  <input type="text" placeholder="What's for dinner?" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-slate-800 focus:bg-white transition-colors outline-none font-bold" autoFocus />
+                  <div className="flex gap-2">
+                    <input type="number" placeholder="Est. Calories" value={editCals} onChange={(e) => setEditCals(e.target.value)} className="w-1/2 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-slate-800 focus:bg-white transition-colors outline-none font-medium" />
+                    <button type="submit" className="w-1/2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl transition-all active:scale-95">Save</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="p-5 flex justify-between items-center bg-white" onClick={() => openEdit(day)}>
+                  {hasMeal ? (
+                    <div>
+                      <div className="font-bold text-slate-800 text-lg">{dayPlan.name}</div>
+                      {dayPlan.cals && <div className="text-sm text-slate-500 font-medium mt-1">{dayPlan.cals} kcal</div>}
+                    </div>
+                  ) : (
+                    <div className="text-slate-400 font-medium italic text-sm">No meal planned</div>
+                  )}
+                  
+                  {isToday && hasMeal && dayPlan.cals && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleLogToDadBod(dayPlan.name, dayPlan.cals); }} 
+                      className="shrink-0 bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 hover:bg-slate-800 transition-all active:scale-95 shadow-sm"
+                    >
+                      <Activity size={14} className="text-blue-400"/> Dad-Bod
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// --- FINANCE TRACKER ---
 function FinanceTracker({ user, showToast, askConfirm }) {
   const [transactionType, setTransactionType] = useState('expense'); 
   const [viewCurrency, setViewCurrency] = useState("MXN"); 
@@ -632,187 +584,6 @@ function FinanceTracker({ user, showToast, askConfirm }) {
   );
 }
 
-// --- DAD-BOD TRACKER COMPONENT (MD3 Styled) ---
-function DadBodTracker({ user, showToast, askConfirm }) {
-  const [sliderCals, setSliderCals] = useState(300);
-  const [foodNote, setFoodNote] = useState("");
-  const [todayCalories, setTodayCalories] = useState(0);
-  const [calorieLogs, setCalorieLogs] = useState([]);
-  const [currentWeight, setCurrentWeight] = useState("");
-  const [latestWeight, setLatestWeight] = useState(null);
-  const [weightLogs, setWeightLogs] = useState([]);
-  const [eatStart, setEatStart] = useState("12:00");
-  const [eatEnd, setEatEnd] = useState("20:00");
-  const [calorieGoal, setCalorieGoal] = useState(2000);
-  const [showSettings, setShowSettings] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
-
-    const calQuery = query(collection(db, `users/${user.uid}/calories`), orderBy("timestamp", "desc"));
-    const unsubCals = onSnapshot(calQuery, (snapshot) => {
-      const logs = []; let todayTotal = 0;
-      snapshot.forEach((doc) => {
-        const data = doc.data(); logs.push({ id: doc.id, ...data });
-        if (data.timestamp && data.timestamp.toDate() >= startOfToday) todayTotal += Number(data.amount) || 0;
-      });
-      setCalorieLogs(logs); setTodayCalories(todayTotal);
-    });
-
-    const weightQuery = query(collection(db, `users/${user.uid}/weights`), orderBy("timestamp", "desc"));
-    const unsubWeight = onSnapshot(weightQuery, (snapshot) => {
-      const logs = []; snapshot.forEach((doc) => logs.push({ id: doc.id, ...doc.data() }));
-      setWeightLogs(logs); if (logs.length > 0) setLatestWeight(logs[0].weight);
-    });
-
-    const settingsRef = doc(db, `users/${user.uid}/settings/dadbod`);
-    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        if (docSnap.data().eatStart) setEatStart(docSnap.data().eatStart);
-        if (docSnap.data().eatEnd) setEatEnd(docSnap.data().eatEnd);
-        if (docSnap.data().calorieGoal) setCalorieGoal(docSnap.data().calorieGoal);
-      }
-    });
-
-    return () => { unsubCals(); unsubWeight(); unsubSettings(); };
-  }, [user]);
-
-  const handleLogCalories = async (e) => {
-    e.preventDefault(); if (!user) return;
-    await addDoc(collection(db, `users/${user.uid}/calories`), { amount: Number(sliderCals), note: foodNote || "Quick Add", timestamp: Timestamp.now() });
-    setSliderCals(300); setFoodNote("");
-    showToast("Calories logged!", "success");
-  };
-
-  const handleLogWeight = async (e) => {
-    e.preventDefault(); if (!user || !currentWeight) return;
-    await addDoc(collection(db, `users/${user.uid}/weights`), { weight: Number(currentWeight), timestamp: Timestamp.now() });
-    setCurrentWeight("");
-    showToast("Weight logged!", "success");
-  };
-
-  const handleDeleteCalorie = (id) => { 
-    askConfirm("Delete Log", "Are you sure you want to remove this calorie log?", async () => {
-      await deleteDoc(doc(db, `users/${user.uid}/calories`, id));
-      showToast("Log deleted", "success");
-    });
-  };
-  
-  const handleDeleteWeight = (id) => { 
-    askConfirm("Delete Weigh-in", "Are you sure you want to remove this weight record?", async () => {
-      await deleteDoc(doc(db, `users/${user.uid}/weights`, id));
-      showToast("Record deleted", "success");
-    });
-  };
-
-  const saveDadBodSettings = async (start, end, goal) => {
-    setEatStart(start); setEatEnd(end); setCalorieGoal(goal);
-    if (user) await setDoc(doc(db, `users/${user.uid}/settings/dadbod`), { eatStart: start, eatEnd: end, calorieGoal: goal }, { merge: true });
-  };
-
-  const checkCompliance = (timestamp) => {
-    if (!timestamp) return true;
-    const date = timestamp.toDate(); const logTime = date.getHours() + date.getMinutes() / 60;
-    const [sH, sM] = eatStart.split(':').map(Number); const [eH, eM] = eatEnd.split(':').map(Number);
-    const startTime = sH + sM / 60; const endTime = eH + eM / 60;
-    if (startTime < endTime) return logTime >= startTime && logTime <= endTime;
-    return logTime >= startTime || logTime <= endTime;
-  };
-
-  const weightChartData = [...weightLogs].reverse().map(l => ({ date: l.timestamp?.toDate().toISOString() || new Date().toISOString(), value: l.weight }));
-  const formatTime = (timestamp) => timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const formatDate = (timestamp) => timestamp?.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' });
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
-  const todaysCalorieLogs = calorieLogs.filter(log => log.timestamp?.toDate() >= startOfToday);
-
-return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12">
-      
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">Today's Intake</p>
-            <h2 className="text-4xl font-black text-white tracking-tight">{todayCalories} <span className="text-lg text-slate-500 font-medium">/ {calorieGoal}</span></h2>
-          </div>
-          <div className="text-right">
-            <p className="text-slate-400 text-sm font-medium mb-1">Weight</p>
-            <div className="text-2xl font-bold text-white">{latestWeight || "--"} <span className="text-sm text-slate-500 font-medium">lbs</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3"><div className="p-2 bg-blue-500/20 text-blue-400 rounded-full"><Utensils size={18} /></div><h2 className="text-lg font-bold text-white">Food Log</h2></div>
-          <button type="button" onClick={() => setShowSettings(!showSettings)} className="text-xs font-bold text-blue-400 flex items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-2 rounded-full transition-all active:scale-95"><Settings size={14}/> Goals</button>
-        </div>
-
-        {showSettings && (
-          <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-3xl grid grid-cols-2 gap-3 animate-in slide-in-from-top-2">
-              <div className="col-span-2"><label className="text-xs font-bold text-slate-400 ml-2">Daily Calorie Goal</label><input type="number" step="50" value={calorieGoal} onChange={(e) => saveDadBodSettings(eatStart, eatEnd, Number(e.target.value))} className="w-full bg-slate-800 rounded-full px-4 py-3 text-base font-bold text-white outline-none mt-1 shadow-inner focus:ring-2 focus:ring-blue-500/50 border border-slate-700" /></div>
-              <div><label className="text-xs font-bold text-slate-400 ml-2">Window Start</label><input type="time" value={eatStart} onChange={(e) => saveDadBodSettings(e.target.value, eatEnd, calorieGoal)} className="w-full bg-slate-800 rounded-full px-4 py-3 text-sm font-bold text-white outline-none mt-1 shadow-inner focus:ring-2 focus:ring-blue-500/50 border border-slate-700" /></div>
-              <div><label className="text-xs font-bold text-slate-400 ml-2">Window End</label><input type="time" value={eatEnd} onChange={(e) => saveDadBodSettings(eatStart, e.target.value, calorieGoal)} className="w-full bg-slate-800 rounded-full px-4 py-3 text-sm font-bold text-white outline-none mt-1 shadow-inner focus:ring-2 focus:ring-blue-500/50 border border-slate-700" /></div>
-          </div>
-        )}
-
-        <form onSubmit={handleLogCalories} className="space-y-6">
-          <div className="space-y-4 bg-slate-800/30 border border-slate-800 p-6 rounded-3xl">
-            <div className="flex justify-center items-end"><span className="text-6xl font-black text-blue-500 tracking-tighter">{sliderCals}</span></div>
-            <input type="range" min="50" max="2500" step="50" value={sliderCals} onChange={(e) => setSliderCals(e.target.value)} className="w-full h-3 bg-slate-700 rounded-full appearance-none cursor-pointer accent-blue-500" />
-          </div>
-          <input type="text" placeholder="What did you eat? (Optional)" value={foodNote} onChange={(e) => setFoodNote(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-full px-5 py-4 text-white placeholder:text-slate-500 focus:bg-slate-700 transition-colors outline-none" />
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white text-lg font-bold py-4 rounded-full shadow-lg shadow-blue-900/20 flex justify-center gap-2 transition-all active:scale-95"><Plus className="w-6 h-6" /> Log Calories</button>
-        </form>
-
-        {todaysCalorieLogs.length > 0 && (
-          <div className="pt-6 border-t border-slate-800">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 ml-2">Today's Logs</h3>
-            <div className="space-y-2">
-              {todaysCalorieLogs.map(log => {
-                const isCompliant = checkCompliance(log.timestamp);
-                return (
-                  <div key={log.id} className={`flex justify-between items-center p-4 rounded-[20px] transition-colors border ${isCompliant ? 'bg-slate-800/50 border-slate-700' : 'bg-red-950/30 border-red-900/50'}`}>
-                    <div>
-                      <div className="font-bold text-slate-200 flex items-center gap-2">{log.note}{!isCompliant && <span className="text-[10px] font-black bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full uppercase tracking-wider">Fasting</span>}</div>
-                      <div className={`text-sm ${isCompliant ? 'text-slate-500' : 'text-red-400/80 font-medium'}`}>{formatTime(log.timestamp)}</div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className={`font-black text-lg ${isCompliant ? 'text-blue-400' : 'text-red-400'}`}>{log.amount} <span className="text-xs font-bold opacity-60">kcal</span></span>
-                      <button onClick={() => handleDeleteCalorie(log.id)} className={`p-2 rounded-full transition-colors ${isCompliant ? 'text-slate-500 hover:bg-slate-700 hover:text-red-400' : 'text-red-500 hover:bg-red-900/50'}`}><Trash2 size={16} /></button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-[28px] shadow-lg space-y-6">
-        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-full"><Weight size={18} /></div><h2 className="text-lg font-bold text-white">Weigh-In</h2></div>
-        <form onSubmit={handleLogWeight} className="flex gap-3">
-          <input type="number" step="0.1" placeholder="e.g. 185.5" value={currentWeight} onChange={(e) => setCurrentWeight(e.target.value)} className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded-full px-5 py-4 text-white placeholder:text-slate-500 text-lg font-bold outline-none focus:bg-slate-700 transition-colors" />
-          <button type="submit" disabled={!currentWeight} className="w-16 shrink-0 bg-indigo-600 disabled:bg-slate-800 text-white disabled:text-slate-600 rounded-full font-bold flex items-center justify-center transition-all active:scale-95"><Check className="w-6 h-6" /></button>
-        </form>
-        {weightChartData.length > 0 && (
-          <div className="pt-2">
-             <div className="opacity-90"><SimpleLineChart data={weightChartData} title="Weight Trend" unit=" lbs" colorHex="#818cf8" /></div>
-             <div className="mt-4 max-h-32 overflow-y-auto space-y-1 pr-2 scrollbar-thin scrollbar-thumb-slate-700">
-                {weightLogs.map(log => (
-                  <div key={log.id} className="flex justify-between items-center text-sm p-3 hover:bg-slate-800 rounded-2xl transition-colors border border-transparent hover:border-slate-700">
-                    <span className="text-slate-400 font-medium">{formatDate(log.timestamp)}</span>
-                    <div className="flex items-center gap-4"><span className="font-bold text-slate-200 text-base">{log.weight} lbs</span><button onClick={() => handleDeleteWeight(log.id)} className="text-slate-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition-colors"><Trash2 size={16} /></button></div>
-                  </div>
-                ))}
-             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // --- MAIN APP ---
 export default function App() {
   const [user, setUser] = useState(null);
@@ -820,7 +591,7 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   
-  // NEW: Added tabOrder to settings state default
+  // NEW: Added 'meals' to the tab order settings
   const [settings, setSettings] = useState({
     tempUnit: 'C', weightUnit: 'kg', heightUnit: 'cm', 
     dashboardOrder: [
@@ -830,7 +601,7 @@ export default function App() {
       { id: 'growth', visible: true, label: 'Growth' },
       { id: 'doctor', visible: true, label: 'Doctor Visit' }
     ],
-    tabOrder: ['family', 'dadbod', 'finance']
+    tabOrder: ['family', 'dadbod', 'finance', 'meals']
   });
   
   const [authLoading, setAuthLoading] = useState(true);
@@ -846,7 +617,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReorderLocked, setIsReorderLocked] = useState(true);
   
-  // NEW: activeTab initializes to null so we can securely fetch from DB before rendering
   const [activeTab, setActiveTab] = useState(null); 
   const controls = useAnimation();
   
@@ -885,9 +655,8 @@ export default function App() {
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite'];
   const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 
-  // Update Swipe to use dynamic tabOrder
   const handleDragEnd = (event, info) => {
-    const tabs = settings.tabOrder || ['family', 'dadbod', 'finance'];
+    const tabs = settings.tabOrder || ['family', 'dadbod', 'finance', 'meals'];
     const currentIndex = tabs.indexOf(activeTab);
     
     if (info.offset.x > 80 && currentIndex > 0) {
@@ -940,8 +709,8 @@ export default function App() {
             merged.dashboardOrder = finalOrder;
             
             // Tab Navigation Order
-            let finalTabOrder = merged.tabOrder || ['family', 'dadbod', 'finance'];
-            const defaultTabs = ['family', 'dadbod', 'finance'];
+            let finalTabOrder = merged.tabOrder || ['family', 'dadbod', 'finance', 'meals'];
+            const defaultTabs = ['family', 'dadbod', 'finance', 'meals'];
             finalTabOrder = finalTabOrder.filter(t => defaultTabs.includes(t));
             defaultTabs.forEach(t => { if (!finalTabOrder.includes(t)) finalTabOrder.push(t); });
             merged.tabOrder = finalTabOrder;
@@ -949,8 +718,7 @@ export default function App() {
             return merged;
           });
           
-          let initialTabOrder = data.tabOrder || ['family', 'dadbod', 'finance'];
-          // Set activeTab to the first tab in the user's saved list, safely checking if it's null
+          let initialTabOrder = data.tabOrder || ['family', 'dadbod', 'finance', 'meals'];
           setActiveTab(prev => prev ? prev : initialTabOrder[0]);
         } else {
           setActiveTab(prev => prev ? prev : 'family');
@@ -1032,7 +800,6 @@ export default function App() {
   const toggleWidgetVisibility = (id) => { const newOrder = settings.dashboardOrder.map(w => w.id === id ? { ...w, visible: !w.visible } : w); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   const moveWidget = (index, direction) => { const newOrder = [...settings.dashboardOrder]; const item = newOrder[index]; newOrder.splice(index, 1); if (direction === 'up') newOrder.splice(Math.max(0, index - 1), 0, item); else newOrder.splice(Math.min(newOrder.length, index + 1), 0, item); handleSaveSettings({ ...settings, dashboardOrder: newOrder }); };
   
-  // NEW: Feature to reorder Bottom Tabs
   const moveTab = (index, direction) => { 
     const newOrder = [...settings.tabOrder]; 
     const item = newOrder[index]; 
@@ -1081,6 +848,8 @@ export default function App() {
     themeBg = 'bg-slate-900'; 
   } else if (activeTab === 'finance') {
     themeBg = 'bg-emerald-600';
+  } else if (activeTab === 'meals') {
+    themeBg = 'bg-orange-500';
   }
 
   const appBg = activeTab === 'dadbod' ? 'bg-slate-950' : 'bg-slate-100';
@@ -1091,7 +860,6 @@ export default function App() {
   const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // Update render block loading state to wait for `activeTab` as well
   if (authLoading || (user && dataLoading) || (user && !activeTab)) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center gap-4"><Activity className="animate-spin text-indigo-600" size={40} /><p className="text-slate-500 font-medium">Loading...</p></div>;
 
   if (!user) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6"><div className="w-full max-w-md bg-white p-8 rounded-[32px] shadow-sm text-center"><div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Activity size={40} className="text-indigo-600" /></div><h1 className="text-2xl font-black text-slate-900 mb-8">Life OS</h1><Button onClick={handleGoogleLogin} variant="google" className="mb-6"><LogIn size={20} /> Sign in with Google</Button><form onSubmit={handleEmailAuth} className="space-y-4 text-left">{authError && <div className="p-3 bg-red-100 text-red-900 text-sm rounded-2xl text-center font-medium">{authError}</div>}<div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Email</label><div className="relative"><Mail className="absolute left-4 top-4 text-slate-400" size={20} /><input type="email" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div><div><label className="block text-sm font-bold text-slate-600 mb-2 ml-1">Password</label><div className="relative"><Lock className="absolute left-4 top-4 text-slate-400" size={20} /><input type="password" className="w-full pl-12 p-4 bg-slate-100 rounded-full outline-none focus:bg-slate-200 transition-colors" value={password} onChange={(e) => setPassword(e.target.value)} /></div></div><Button type="submit" className="w-full mt-2">{isSignUp ? "Create Account" : "Log In"}</Button></form><button onClick={() => setIsSignUp(!isSignUp)} className="mt-8 text-indigo-600 text-sm font-bold hover:text-indigo-800">{isSignUp ? "Log In Instead" : "Create an Account"}</button></div></div>;
@@ -1113,7 +881,6 @@ export default function App() {
 return (
     <div className={`min-h-screen font-sans pb-24 selection:bg-indigo-500 selection:text-white transition-colors duration-500 ${appBg}`}>
       
-      {/* --- NEW: CUSTOM TOAST COMPONENT --- */}
       <AnimatePresence>
         {toast.visible && (
           <motion.div 
@@ -1128,7 +895,6 @@ return (
         )}
       </AnimatePresence>
 
-      {/* --- NEW: CUSTOM CONFIRMATION MODAL --- */}
       <Modal isOpen={confirmModal.visible} onClose={() => setConfirmModal({ ...confirmModal, visible: false })} title={confirmModal.title}>
         <p className="text-slate-600 font-medium mb-6">{confirmModal.text}</p>
         <div className="flex gap-3">
@@ -1146,6 +912,7 @@ return (
               <h1 className="text-2xl font-black flex items-center gap-2 tracking-tight">
                 {activeTab === 'dadbod' && "Dad-bod Mode"}
                 {activeTab === 'finance' && "Wallet"}
+                {activeTab === 'meals' && "Meal Planner"}
                 {activeTab === 'family' && <><Activity size={24} /> Family Health</>}
               </h1>
               <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-1 animate-pulse">&larr; Swipe to switch &rarr;</p>
@@ -1162,7 +929,6 @@ return (
             </div>
           </div>
   
-          {/* DADBOD BANNER */}
           {activeTab === 'dadbod' && <DadBodBanner user={user} showToast={showToast} askConfirm={askConfirm} />}
 
           {activeTab === 'family' && children.length > 0 && (
@@ -1193,17 +959,9 @@ return (
           )}
         </div>
 
-        {activeTab === 'dadbod' && (
-          <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20">
-            <DadBodTracker user={user} showToast={showToast} askConfirm={askConfirm} />
-          </div>
-        )}
-
-        {activeTab === 'finance' && (
-          <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20">
-            <FinanceTracker user={user} showToast={showToast} askConfirm={askConfirm} />
-          </div>
-        )}
+        {activeTab === 'dadbod' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><DadBodTracker user={user} showToast={showToast} askConfirm={askConfirm} /></div>}
+        {activeTab === 'finance' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><FinanceTracker user={user} showToast={showToast} askConfirm={askConfirm} /></div>}
+        {activeTab === 'meals' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><MealPlanner user={user} showToast={showToast} /></div>}
 
         {activeTab === 'family' && (
           <>
@@ -1257,7 +1015,6 @@ return (
 
       </div>
 
-      {/* THE NEW DYNAMIC BOTTOM NAVIGATION BAR */}
       <div className={`fixed bottom-0 left-0 right-0 z-50 transition-colors duration-500 ${activeTab === 'dadbod' ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'} backdrop-blur-xl border-t`}>
         <div className="max-w-md mx-auto flex justify-around p-2 pb-safe">
           {settings.tabOrder.map(tab => {
@@ -1279,6 +1036,12 @@ return (
                 <span className="text-[10px] font-bold mt-1">Wallet</span>
               </button>
             );
+            if (tab === 'meals') return (
+              <button key="meals" onClick={() => setActiveTab('meals')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'meals' ? 'text-orange-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}>
+                <ChefHat size={24} className={activeTab === 'meals' ? 'fill-orange-100' : ''} />
+                <span className="text-[10px] font-bold mt-1">Meals</span>
+              </button>
+            );
             return null;
           })}
         </div>
@@ -1290,8 +1053,7 @@ return (
           
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Widgets</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.dashboardOrder.map((widget, idx) => (<div key={widget.id} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><button onClick={() => toggleWidgetVisibility(widget.id)} className={`p-2 rounded-full transition-colors ${widget.visible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>{widget.visible ? <Eye size={20} /> : <EyeOff size={20} />}</button><span className={`font-bold ${widget.visible ? 'text-slate-800' : 'text-slate-400'}`}>{widget.label}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveWidget(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.dashboardOrder.length - 1} onClick={() => moveWidget(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
           
-          {/* NEW: Navigation Tabs Customization in Settings */}
-          <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Navigation Tabs</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.tabOrder.map((tab, idx) => (<div key={tab} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><span className="font-bold text-slate-800">{tab === 'family' ? 'Family Health' : tab === 'dadbod' ? 'Dad-Bod Mode' : 'Wallet'}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveTab(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.tabOrder.length - 1} onClick={() => moveTab(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
+          <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Navigation Tabs</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.tabOrder.map((tab, idx) => (<div key={tab} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><span className="font-bold text-slate-800">{tab === 'family' ? 'Family Health' : tab === 'dadbod' ? 'Dad-Bod Mode' : tab === 'finance' ? 'Wallet' : 'Meals'}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveTab(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.tabOrder.length - 1} onClick={() => moveTab(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
 
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Account</h4><Button variant="outline" onClick={handleExportData} className="w-full mb-3 !rounded-full"><Download size={18} /> Export Data (JSON)</Button><Button variant="danger" onClick={handleLogout} className="w-full !rounded-full"><LogOut size={18} /> Sign Out</Button></div>
         </div>
