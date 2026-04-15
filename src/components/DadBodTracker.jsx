@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Utensils, Weight, Settings, Plus, Trash2, Check, Clock, Droplet, Activity, ChevronUp, ChevronDown } from 'lucide-react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, setDoc } from "firebase/firestore";
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { SimpleLineChart } from "./SharedUI";
 
@@ -33,9 +33,28 @@ export function DadBodBanner({ user, showToast, askConfirm }) {
 
   const handleAddWater = async () => { if (!user) return; await setDoc(doc(db, `users/${user.uid}/water`, new Date().toISOString().split('T')[0]), { count: Math.min(waterCount + 1, 8) }, { merge: true }); };
   const handleRemoveWater = async () => { if (!user || waterCount === 0) return; await setDoc(doc(db, `users/${user.uid}/water`, new Date().toISOString().split('T')[0]), { count: waterCount - 1 }, { merge: true }); };
-  const handleAddHabit = async (e) => { e.preventDefault(); if (!newHabitName.trim() || !user) return; await addDoc(collection(db, `users/${user.uid}/habits`), { name: newHabitName, completedDates: [], createdAt: Timestamp.now() }); setNewHabitName(""); showToast("Habit tracked!", "success"); };
-  const toggleHabitDate = async (habit, dateStr) => { import { updateDoc } from "firebase/firestore"; let updatedDates = [...(habit.completedDates || [])]; if (updatedDates.includes(dateStr)) updatedDates = updatedDates.filter(d => d !== dateStr); else updatedDates.push(dateStr); await updateDoc(doc(db, `users/${user.uid}/habits`, habit.id), { completedDates: updatedDates }); };
-  const handleDeleteHabit = (id) => { askConfirm("Delete Habit", "Are you sure you want to stop tracking this habit?", async () => { await deleteDoc(doc(db, `users/${user.uid}/habits`, id)); showToast("Habit deleted", "success"); }); };
+  
+  const handleAddHabit = async (e) => { 
+    e.preventDefault(); 
+    if (!newHabitName.trim() || !user) return; 
+    await addDoc(collection(db, `users/${user.uid}/habits`), { name: newHabitName, completedDates: [], createdAt: Timestamp.now() }); 
+    setNewHabitName(""); 
+    showToast("Habit tracked!", "success"); 
+  };
+  
+  const toggleHabitDate = async (habit, dateStr) => { 
+    let updatedDates = [...(habit.completedDates || [])]; 
+    if (updatedDates.includes(dateStr)) updatedDates = updatedDates.filter(d => d !== dateStr); 
+    else updatedDates.push(dateStr); 
+    await updateDoc(doc(db, `users/${user.uid}/habits`, habit.id), { completedDates: updatedDates }); 
+  };
+  
+  const handleDeleteHabit = (id) => { 
+    askConfirm("Delete Habit", "Are you sure you want to stop tracking this habit?", async () => { 
+      await deleteDoc(doc(db, `users/${user.uid}/habits`, id)); 
+      showToast("Habit deleted", "success"); 
+    }); 
+  };
 
   const last7Days = useMemo(() => {
     const days = []; for (let i = 6; i >= 0; i--) { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i); days.push({ dateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, dayName: d.toLocaleDateString([], { weekday: 'short' }).charAt(0), dayNum: d.getDate() }); } return days;
