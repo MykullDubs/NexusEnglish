@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle, Pencil, CloudDownload, Loader2, X, Check
+  Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle, Pencil, Download, Loader2, X, Check
 } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
@@ -128,7 +128,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
         </div>
         <div className="flex gap-2">
           <button onClick={fetchLeads} disabled={isFetching} className="p-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-2xl transition-colors active:scale-95 shadow-sm disabled:opacity-50">
-            {isFetching ? <Loader2 size={24} className="animate-spin" /> : <CloudDownload size={24} />}
+            {isFetching ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
           </button>
           <button onClick={openAdd} className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl transition-colors active:scale-95 shadow-sm">
             <Plus size={24} />
