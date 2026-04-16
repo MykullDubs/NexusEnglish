@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Briefcase, Plus, Clock, Globe, Building, ArrowRight, 
-  Trash2, ExternalLink, CheckCircle, Pencil
+  Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle, Pencil, CloudDownload, Loader2, X, Check
 } from 'lucide-react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, updateDoc } from "firebase/firestore";
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { Modal, Button } from "./SharedUI";
 
+// Notice the new 'inbox' stage at the front!
 const STAGES = [
+  { id: 'inbox', label: 'Inbox', color: 'bg-purple-100 text-purple-700', border: 'border-purple-200' },
   { id: 'saved', label: 'Saved', color: 'bg-slate-100 text-slate-700', border: 'border-slate-200' },
   { id: 'applied', label: 'Applied', color: 'bg-blue-100 text-blue-700', border: 'border-blue-200' },
   { id: 'interview', label: 'Interviewing', color: 'bg-orange-100 text-orange-700', border: 'border-orange-200' },
@@ -18,6 +19,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
   const [jobs, setJobs] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ptTime, setPtTime] = useState("");
+  const [isFetching, setIsFetching] = useState(false);
   
   // Form State
   const [editingId, setEditingId] = useState(null);
@@ -34,7 +36,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch Jobs
+  // Fetch Jobs from Firebase
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(query(collection(db, `users/${user.uid}/jobs`), orderBy("createdAt", "desc")), (snap) => {
@@ -42,6 +44,38 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     });
     return () => unsub();
   }, [user]);
+
+  // Vercel Serverless Function Call
+  const fetchLeads = async () => {
+    if (!user) return;
+    setIsFetching(true);
+    try {
+      const res = await fetch('/api/fetchJobs');
+      const data = await res.json();
+      
+      if (data.error) {
+        showToast(data.error, "error");
+        setIsFetching(false);
+        return;
+      }
+
+      if (data.jobs && data.jobs.length > 0) {
+        const batch = writeBatch(db);
+        data.jobs.forEach(job => {
+          const ref = doc(collection(db, `users/${user.uid}/jobs`));
+          batch.set(ref, { ...job, createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
+        });
+        await batch.commit();
+        showToast(`Fetched ${data.jobs.length} new leads!`, "success");
+      } else {
+        showToast("No new leads found right now.", "success");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Network error fetching leads.", "error");
+    }
+    setIsFetching(false);
+  };
 
   const handleSaveJob = async (e) => {
     e.preventDefault();
@@ -92,9 +126,14 @@ export default function JobCRM({ user, showToast, askConfirm }) {
             </div>
           </div>
         </div>
-        <button onClick={openAdd} className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl transition-colors active:scale-95 shadow-sm">
-          <Plus size={24} />
-        </button>
+        <div className="flex gap-2">
+          <button onClick={fetchLeads} disabled={isFetching} className="p-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-2xl transition-colors active:scale-95 shadow-sm disabled:opacity-50">
+            {isFetching ? <Loader2 size={24} className="animate-spin" /> : <CloudDownload size={24} />}
+          </button>
+          <button onClick={openAdd} className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl transition-colors active:scale-95 shadow-sm">
+            <Plus size={24} />
+          </button>
+        </div>
       </div>
 
       {/* Kanban Board (Horizontal Scroll) */}
@@ -126,20 +165,28 @@ export default function JobCRM({ user, showToast, askConfirm }) {
 
                     {job.salary && <div className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded-lg mb-3">{job.salary}</div>}
 
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                      <div className="flex gap-2">
-                        {job.url && <a href={job.url} target="_blank" rel="noreferrer" className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"><ExternalLink size={14}/></a>}
-                        <button onClick={() => deleteJob(job.id)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={14}/></button>
+                    {/* Triage Logic for the Inbox Column */}
+                    {stage.id === 'inbox' ? (
+                      <div className="flex w-full gap-2 mt-3 pt-3 border-t border-slate-50">
+                        <button onClick={() => deleteJob(job.id)} className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><X size={16}/> Discard</button>
+                        <button onClick={() => moveJob(job.id, 0)} className="flex-1 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><Check size={16}/> Keep</button>
                       </div>
-                      
-                      {index < STAGES.length - 1 ? (
-                        <button onClick={() => moveJob(job.id, index)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">
-                          Advance <ArrowRight size={14}/>
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold px-3 py-1.5 bg-emerald-50 rounded-xl"><CheckCircle size={14}/> Complete</div>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                        <div className="flex gap-2">
+                          {job.url && <a href={job.url} target="_blank" rel="noreferrer" className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"><ExternalLink size={14}/></a>}
+                          <button onClick={() => deleteJob(job.id)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={14}/></button>
+                        </div>
+                        
+                        {index < STAGES.length - 1 ? (
+                          <button onClick={() => moveJob(job.id, index)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">
+                            Advance
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold px-3 py-1.5 bg-emerald-50 rounded-xl"><CheckCircle size={14}/> Complete</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
