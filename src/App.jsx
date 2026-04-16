@@ -5,7 +5,7 @@ import {
   TrendingUp, List, LogOut, LogIn, Mail, Lock, Unlock, AlertCircle, 
   Utensils, Droplets, Bone, Settings, ArrowUp, ArrowDown, 
   Eye, EyeOff, Download, Stethoscope, Check, User, Home, Wallet, ChefHat,
-  Pencil, Droplet, Repeat, Bell // <-- Restored missing icons!
+  Pencil, Droplet, Repeat, Bell, Briefcase
 } from 'lucide-react';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { collection, addDoc, deleteDoc, updateDoc, setDoc, getDoc, doc, onSnapshot, query, orderBy, writeBatch } from "firebase/firestore";
@@ -17,6 +17,7 @@ import { Button, RollerInput, Modal, SimpleLineChart } from "./components/Shared
 import MealPlanner from "./components/MealPlanner";
 import FinanceTracker from "./components/FinanceTracker";
 import DadBodTracker, { DadBodBanner } from "./components/DadBodTracker";
+import JobCRM from "./components/JobCRM";
 
 // --- Helpers ---
 const calculateAge = (dob) => {
@@ -40,7 +41,7 @@ export default function App() {
       { id: 'growth', visible: true, label: 'Growth' },
       { id: 'doctor', visible: true, label: 'Doctor Visit' }
     ],
-    tabOrder: ['family', 'dadbod', 'finance', 'meals']
+    tabOrder: ['family', 'dadbod', 'finance', 'meals', 'jobs']
   });
   
   const [authLoading, setAuthLoading] = useState(true); const [dataLoading, setDataLoading] = useState(true); const [fetchError, setFetchError] = useState(null);
@@ -59,7 +60,7 @@ export default function App() {
 
   const commonSymptoms = ['Cough', 'Runny Nose', 'Vomiting', 'Diarrhea', 'Rash', 'Fatigue', 'Headache', 'Sore Throat', 'Lethargy', 'No Appetite']; const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 
-  const handleDragEnd = (event, info) => { const tabs = settings.tabOrder || ['family', 'dadbod', 'finance', 'meals']; const currentIndex = tabs.indexOf(activeTab); if (info.offset.x > 80 && currentIndex > 0) { setActiveTab(tabs[currentIndex - 1]); } else if (info.offset.x < -80 && currentIndex < tabs.length - 1) { setActiveTab(tabs[currentIndex + 1]); } controls.start({ x: 0 }); };
+  const handleDragEnd = (event, info) => { const tabs = settings.tabOrder || ['family', 'dadbod', 'finance', 'meals', 'jobs']; const currentIndex = tabs.indexOf(activeTab); if (info.offset.x > 80 && currentIndex > 0) { setActiveTab(tabs[currentIndex - 1]); } else if (info.offset.x < -80 && currentIndex < tabs.length - 1) { setActiveTab(tabs[currentIndex + 1]); } controls.start({ x: 0 }); };
 
   useEffect(() => { if ("Notification" in window && Notification.permission !== 'granted') Notification.requestPermission(); }, []);
 
@@ -78,10 +79,10 @@ export default function App() {
             const merged = { ...prev, ...data };
             const defaults = [{ id: 'symptom', visible: true, label: 'Symptom' }, { id: 'medicine', visible: true, label: 'Medicine' }, { id: 'nutrition', visible: true, label: 'Nutrition' }, { id: 'growth', visible: true, label: 'Growth' }, { id: 'doctor', visible: true, label: 'Doctor Visit' }];
             const finalOrder = merged.dashboardOrder || []; defaults.forEach(def => { if (!finalOrder.find(item => item.id === def.id)) finalOrder.push(def); }); merged.dashboardOrder = finalOrder;
-            let finalTabOrder = merged.tabOrder || ['family', 'dadbod', 'finance', 'meals']; const defaultTabs = ['family', 'dadbod', 'finance', 'meals']; finalTabOrder = finalTabOrder.filter(t => defaultTabs.includes(t)); defaultTabs.forEach(t => { if (!finalTabOrder.includes(t)) finalTabOrder.push(t); }); merged.tabOrder = finalTabOrder;
+            let finalTabOrder = merged.tabOrder || ['family', 'dadbod', 'finance', 'meals', 'jobs']; const defaultTabs = ['family', 'dadbod', 'finance', 'meals', 'jobs']; finalTabOrder = finalTabOrder.filter(t => defaultTabs.includes(t)); defaultTabs.forEach(t => { if (!finalTabOrder.includes(t)) finalTabOrder.push(t); }); merged.tabOrder = finalTabOrder;
             return merged;
           });
-          let initialTabOrder = data.tabOrder || ['family', 'dadbod', 'finance', 'meals']; setActiveTab(prev => prev ? prev : initialTabOrder[0]);
+          let initialTabOrder = data.tabOrder || ['family', 'dadbod', 'finance', 'meals', 'jobs']; setActiveTab(prev => prev ? prev : initialTabOrder[0]);
         } else { setActiveTab(prev => prev ? prev : 'family'); }
       } catch (e) { console.error("Settings fetch error", e); setActiveTab(prev => prev ? prev : 'family'); }
     };
@@ -132,6 +133,7 @@ export default function App() {
   else if (activeTab === 'dadbod') { themeBg = 'bg-slate-900'; } 
   else if (activeTab === 'finance') { themeBg = 'bg-emerald-600'; } 
   else if (activeTab === 'meals') { themeBg = 'bg-orange-500'; }
+  else if (activeTab === 'jobs') { themeBg = 'bg-indigo-600'; }
 
   const appBg = activeTab === 'dadbod' ? 'bg-slate-950' : 'bg-slate-100';
   const currentChildLogs = logs.filter(l => l.childId === selectedChild?.id);
@@ -168,6 +170,7 @@ export default function App() {
                 {activeTab === 'dadbod' && "Dad-bod Mode"}
                 {activeTab === 'finance' && "Wallet"}
                 {activeTab === 'meals' && "Meal Planner"}
+                {activeTab === 'jobs' && "Job Pipeline"}
                 {activeTab === 'family' && <><Activity size={24} /> Family Health</>}
               </h1>
               <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-1 animate-pulse">&larr; Swipe to switch &rarr;</p>
@@ -214,7 +217,8 @@ export default function App() {
 
         {activeTab === 'dadbod' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><DadBodTracker user={user} showToast={showToast} askConfirm={askConfirm} /></div>}
         {activeTab === 'finance' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><FinanceTracker user={user} showToast={showToast} askConfirm={askConfirm} /></div>}
-        {activeTab === 'meals' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><MealPlanner user={user} showToast={showToast} /></div>}
+        {activeTab === 'meals' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><MealPlanner user={user} showToast={showToast} askConfirm={askConfirm} /></div>}
+        {activeTab === 'jobs' && <div className="flex-1 p-6 overflow-y-auto -mt-6 z-20"><JobCRM user={user} showToast={showToast} askConfirm={askConfirm} /></div>}
 
         {activeTab === 'family' && (
           <>
@@ -271,6 +275,7 @@ export default function App() {
             if (tab === 'dadbod') return (<button key="dadbod" onClick={() => setActiveTab('dadbod')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'dadbod' ? 'text-white' : 'text-slate-400'}`}><Activity size={24} className={activeTab === 'dadbod' ? 'fill-slate-700' : ''} /><span className="text-[10px] font-bold mt-1">DadBod</span></button>);
             if (tab === 'finance') return (<button key="finance" onClick={() => setActiveTab('finance')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'finance' ? 'text-emerald-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}><Wallet size={24} className={activeTab === 'finance' ? 'fill-emerald-100' : ''} /><span className="text-[10px] font-bold mt-1">Wallet</span></button>);
             if (tab === 'meals') return (<button key="meals" onClick={() => setActiveTab('meals')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'meals' ? 'text-orange-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}><ChefHat size={24} className={activeTab === 'meals' ? 'fill-orange-100' : ''} /><span className="text-[10px] font-bold mt-1">Meals</span></button>);
+            if (tab === 'jobs') return (<button key="jobs" onClick={() => setActiveTab('jobs')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'jobs' ? 'text-indigo-600' : (activeTab === 'dadbod' ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400')}`}><Briefcase size={24} className={activeTab === 'jobs' ? 'fill-indigo-100' : ''} /><span className="text-[10px] font-bold mt-1">Jobs</span></button>);
             return null;
           })}
         </div>
@@ -282,7 +287,7 @@ export default function App() {
           
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Widgets</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.dashboardOrder.map((widget, idx) => (<div key={widget.id} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><button onClick={() => toggleWidgetVisibility(widget.id)} className={`p-2 rounded-full transition-colors ${widget.visible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>{widget.visible ? <Eye size={20} /> : <EyeOff size={20} />}</button><span className={`font-bold ${widget.visible ? 'text-slate-800' : 'text-slate-400'}`}>{widget.label}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveWidget(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.dashboardOrder.length - 1} onClick={() => moveWidget(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
           
-          <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Navigation Tabs</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.tabOrder.map((tab, idx) => (<div key={tab} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><span className="font-bold text-slate-800">{tab === 'family' ? 'Family Health' : tab === 'dadbod' ? 'Dad-Bod Mode' : tab === 'finance' ? 'Wallet' : 'Meals'}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveTab(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.tabOrder.length - 1} onClick={() => moveTab(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
+          <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Navigation Tabs</h4><div className="bg-slate-50 p-3 rounded-[28px] space-y-2">{settings.tabOrder.map((tab, idx) => (<div key={tab} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm"><div className="flex items-center gap-3"><span className="font-bold text-slate-800">{tab === 'family' ? 'Family Health' : tab === 'dadbod' ? 'Dad-Bod Mode' : tab === 'finance' ? 'Wallet' : tab === 'meals' ? 'Meals' : 'Jobs'}</span></div><div className="flex gap-1"><button disabled={idx === 0} onClick={() => moveTab(idx, 'up')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowUp size={20} /></button><button disabled={idx === settings.tabOrder.length - 1} onClick={() => moveTab(idx, 'down')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full disabled:opacity-30"><ArrowDown size={20} /></button></div></div>))}</div></div>
 
           <div><h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Account</h4><Button variant="outline" onClick={handleExportData} className="w-full mb-3 !rounded-full"><Download size={18} /> Export Data (JSON)</Button><Button variant="danger" onClick={handleLogout} className="w-full !rounded-full"><LogOut size={18} /> Sign Out</Button></div>
         </div>
