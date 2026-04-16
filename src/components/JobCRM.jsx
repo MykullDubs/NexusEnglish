@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle, Pencil, Download, Loader2, X, Check
+  Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle, Pencil, Download, Loader2, X, Check, ArrowRight
 } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { Modal, Button } from "./SharedUI";
+import { motion } from "framer-motion";
 
-// Notice the new 'inbox' stage at the front!
 const STAGES = [
   { id: 'inbox', label: 'Inbox', color: 'bg-purple-100 text-purple-700', border: 'border-purple-200' },
   { id: 'saved', label: 'Saved', color: 'bg-slate-100 text-slate-700', border: 'border-slate-200' },
@@ -101,6 +101,11 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     await updateDoc(doc(db, `users/${user.uid}/jobs`, id), { stage: nextStage, updatedAt: Timestamp.now() });
   };
 
+  const fastDiscardLead = async (id) => {
+    // No confirmation pop-up. Fast, frictionless triage.
+    await deleteDoc(doc(db, `users/${user.uid}/jobs`, id));
+  };
+
   const deleteJob = (id) => {
     askConfirm("Delete Job", "Remove this application from your pipeline?", async () => {
       await deleteDoc(doc(db, `users/${user.uid}/jobs`, id));
@@ -140,6 +145,8 @@ export default function JobCRM({ user, showToast, askConfirm }) {
       <div className="flex-1 overflow-x-auto flex gap-4 pb-4 snap-x snap-mandatory scrollbar-hide">
         {STAGES.map((stage, index) => {
           const stageJobs = jobs.filter(j => j.stage === stage.id);
+          const isInbox = stage.id === 'inbox';
+
           return (
             <div key={stage.id} className={`w-[85%] shrink-0 snap-center bg-slate-50/50 border ${stage.border} rounded-[28px] flex flex-col max-h-[65vh]`}>
               <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white/50 rounded-t-[28px]">
@@ -151,44 +158,77 @@ export default function JobCRM({ user, showToast, askConfirm }) {
               
               <div className="p-3 overflow-y-auto space-y-3 flex-1 scrollbar-hide">
                 {stageJobs.length === 0 && <div className="text-center text-sm font-medium text-slate-400 italic mt-6">No jobs here</div>}
-                
-                {stageJobs.map(job => (
-                  <div key={job.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-100 transition-colors group relative">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-slate-900 flex items-center gap-2">{job.company}</h3>
-                      <button onClick={() => openEdit(job)} className="text-slate-300 hover:text-indigo-600 p-1"><Pencil size={14}/></button>
-                    </div>
-                    
-                    <div className="text-sm font-medium text-slate-600 flex items-center gap-1.5 mb-3">
-                      <Globe size={14} className="text-slate-400"/> {job.role || "Role not specified"}
-                    </div>
+                {isInbox && stageJobs.length > 0 && <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">&larr; Swipe Left to Trash | Swipe Right to Keep &rarr;</div>}
 
-                    {job.salary && <div className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded-lg mb-3">{job.salary}</div>}
-
-                    {/* Triage Logic for the Inbox Column */}
-                    {stage.id === 'inbox' ? (
-                      <div className="flex w-full gap-2 mt-3 pt-3 border-t border-slate-50">
-                        <button onClick={() => deleteJob(job.id)} className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><X size={16}/> Discard</button>
-                        <button onClick={() => moveJob(job.id, 0)} className="flex-1 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><Check size={16}/> Keep</button>
+                {stageJobs.map(job => {
+                  
+                  const cardContent = (
+                    <>
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2">{job.company}</h3>
+                        <button onClick={() => openEdit(job)} className="text-slate-300 hover:text-indigo-600 p-1"><Pencil size={14}/></button>
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                        <div className="flex gap-2">
-                          {job.url && <a href={job.url} target="_blank" rel="noreferrer" className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"><ExternalLink size={14}/></a>}
-                          <button onClick={() => deleteJob(job.id)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={14}/></button>
+                      
+                      <div className="text-sm font-medium text-slate-600 flex items-center gap-1.5 mb-3">
+                        <Globe size={14} className="text-slate-400"/> {job.role || "Role not specified"}
+                      </div>
+
+                      {job.salary && <div className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded-lg mb-3">{job.salary}</div>}
+
+                      {isInbox ? (
+                        <div className="flex w-full gap-2 mt-3 pt-3 border-t border-slate-50">
+                          <button onClick={() => fastDiscardLead(job.id)} className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><X size={16}/> Discard</button>
+                          <button onClick={() => moveJob(job.id, 0)} className="flex-1 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><Check size={16}/> Keep</button>
                         </div>
-                        
-                        {index < STAGES.length - 1 ? (
-                          <button onClick={() => moveJob(job.id, index)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">
-                            Advance
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold px-3 py-1.5 bg-emerald-50 rounded-xl"><CheckCircle size={14}/> Complete</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      ) : (
+                        <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                          <div className="flex gap-2">
+                            {job.url && <a href={job.url} target="_blank" rel="noreferrer" className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"><ExternalLink size={14}/></a>}
+                            <button onClick={() => deleteJob(job.id)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={14}/></button>
+                          </div>
+                          
+                          {index < STAGES.length - 1 ? (
+                            <button onClick={() => moveJob(job.id, index)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">
+                              Advance <ArrowRight size={14} />
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold px-3 py-1.5 bg-emerald-50 rounded-xl"><CheckCircle size={14}/> Complete</div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+
+                  // If it's the Inbox, wrap it in a draggable motion.div
+                  if (isInbox) {
+                    return (
+                      <motion.div 
+                        key={job.id} 
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.8}
+                        onDragEnd={(e, info) => {
+                          if (info.offset.x < -100) {
+                            fastDiscardLead(job.id);
+                          } else if (info.offset.x > 100) {
+                            moveJob(job.id, 0); 
+                          }
+                        }}
+                        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 transition-colors group relative cursor-grab active:cursor-grabbing touch-pan-y"
+                      >
+                        {cardContent}
+                      </motion.div>
+                    );
+                  }
+
+                  // Otherwise, render a normal static div
+                  return (
+                    <div key={job.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-100 transition-colors group relative">
+                      {cardContent}
+                    </div>
+                  );
+
+                })}
               </div>
             </div>
           );
