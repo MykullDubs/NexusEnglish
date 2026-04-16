@@ -8,16 +8,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Expanded search parameters using OR logic to catch more variations of the roles
-    const keywords = encodeURIComponent("instructional OR curriculum OR elearning OR ESL");
+    // 1. Remove "where=remote" so we don't search for the town in Oregon
+    // 2. Put "remote" directly into the keywords
+    // 3. Use Adzuna's OR syntax to cast a massive net
+    const keywords = encodeURIComponent("remote instructional OR remote curriculum OR remote elearning OR remote ESL");
     
-    // Increased results_per_page to 20 to give you a solid batch to triage
-    const url = `https://api.adzuna.com/v1/api/jobs/us/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${keywords}&where=remote`;
+    // Increased to 30 results per page to give you a solid inbox batch
+    const url = `https://api.adzuna.com/v1/api/jobs/us/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=30&what=${keywords}`;
     
     const response = await fetch(url);
     const data = await response.json();
 
-    if (!data.results) {
+    if (!data.results || data.results.length === 0) {
       return res.status(200).json({ jobs: [] });
     }
 
