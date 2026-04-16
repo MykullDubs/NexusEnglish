@@ -1,6 +1,5 @@
 // api/fetchJobs.js
 export default async function handler(req, res) {
-  // These will be securely stored in your Vercel project settings
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
 
@@ -9,20 +8,26 @@ export default async function handler(req, res) {
   }
 
   try {
-    // We are querying US remote jobs for Instructional Design & EdTech
-    const url = `https://api.adzuna.com/v1/api/jobs/us/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=10&what=instructional%20designer%20edtech&where=remote`;
+    // Expanded search parameters using OR logic to catch more variations of the roles
+    const keywords = encodeURIComponent("instructional OR curriculum OR elearning OR ESL");
+    
+    // Increased results_per_page to 20 to give you a solid batch to triage
+    const url = `https://api.adzuna.com/v1/api/jobs/us/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${keywords}&where=remote`;
     
     const response = await fetch(url);
     const data = await response.json();
 
-    // Map Adzuna's messy data into our clean Life OS schema
+    if (!data.results) {
+      return res.status(200).json({ jobs: [] });
+    }
+
     const formattedJobs = data.results.map(job => ({
       company: job.company.display_name,
-      role: job.title.replace(/<\/?[^>]+(>|$)/g, ""), // Strip HTML tags
+      role: job.title.replace(/<\/?[^>]+(>|$)/g, ""), 
       url: job.redirect_url,
       salary: job.salary_min ? `$${Math.round(job.salary_min/1000)}k - $${Math.round(job.salary_max/1000)}k` : "",
       notes: job.description.replace(/<\/?[^>]+(>|$)/g, ""),
-      stage: "inbox" // This drops it directly into the new triage column!
+      stage: "inbox" 
     }));
 
     res.status(200).json({ jobs: formattedJobs });
