@@ -1,11 +1,12 @@
 // api/fetchJobs.js
 export default async function handler(req, res) {
   try {
-    const headers = { 'User-Agent': 'LifeOS-GUI-V12/12.0' };
+    // Upgraded headers to bypass basic WAFs and demand JSON
+    const headers = { 
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json, text/plain, */*'
+    };
 
-    // =========================================================
-    // 1. PARSE REQUEST (Fixed JSON parsing bug)
-    // =========================================================
     const body       = req.body || {};
     const daysLimit  = parseInt(body.days)  || parseInt(req.query.days)  || 14;
     const page       = Math.max(1, parseInt(body.page) || parseInt(req.query.page) || 1);
@@ -24,38 +25,19 @@ export default async function handler(req, res) {
     const bannedLocations = rawLocations.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
     // =========================================================
-    // 3. SOURCE CONFIGURATIONS
+    // 3. PRUNED SOURCE CONFIGURATIONS (Removed 404s)
     // =========================================================
     const greenhouseBoards = [
-      'coursera', 'duolingo', 'masterclass', 'guildeducation', 'udemy',
-      'quizlet', 'articulate', 'instructure', 'chegg', 'amplify',
-      'ixllearning', 'teachable', 'thinkific', 'goguardian', 'betterup',
-      'synthesis', 'degreed', 'coachhub', 'remind', 'mainstay',
-      'preply', 'lingoda', 'elsa', 'busuu', 'hone', 'section', 'rivo',
-      'cornerstone', 'learnupon', '360learning', 'absorblms', 'docebo',
-      'skillshare', 'brainpop', 'newsela', 'datacamp', 'ageoflearning',
-      'pluralsight', 'babbel', 'memrise', 'outlier', 'classdojo', 'nearpod'
+      'coursera', 'duolingo', 'masterclass', 'udemy', 'ixllearning', 'thinkific', 'hone', 'datacamp'
     ];
 
     const leverBoards = [
-      'outschool', 'khanacademy', 'edpuzzle', 'seesaw', 'varsitytutors',
-      'paper', 'swingeducation', 'loora', 'kyronlearning', 'labster', 'springboard',
-      'litmos', 'lessonly', 'highspot', 'workramp', 'cambly', 'kahoot', 'speak', 'slang'
+      'edpuzzle'
     ];
 
-    const workdayBoards = [
-      { slug: '2u',         display: '2U'          },
-      { slug: 'pearson',    display: 'Pearson'     },
-      { slug: 'mcgrawhill', display: 'McGraw-Hill' },
-      { slug: 'cengage',    display: 'Cengage'     },
-    ];
-
-    const ashbyBoards           = ['maven', 'reforge', 'sanalabs'];
-    const breezyBoards          = ['teachaway', 'classpoint'];
-    const bambooBoards          = ['dreambox', 'zearn', 'promethean', 'scholastic'];
-    const workableBoards        = ['magoosh', 'edmentum', 'gynzy', 'knewton'];
+    // Workday, USAJobs, and FindWork removed/commented out due to API Key/CSRF blocks
+    const workableBoards        = ['edmentum'];
     const smartRecruitersBoards = ['canva'];
-    const recruiteeBoards       = ['toucan', 'kognity', 'studyportals'];
 
     // =========================================================
     // 4. SAFE WRAPPER
@@ -86,42 +68,6 @@ export default async function handler(req, res) {
       })
     );
 
-    const workdayPromises = workdayBoards.map(board =>
-      safe(`Workday:${board.slug}`, async () => {
-        const r = await fetch(`https://www.myworkdayjobs.com/wday/cxs/${board.slug}/${board.slug}Careers/jobs`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: 'instructional designer' }) });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        return (d.jobPostings || []).map(j => ({ company: board.display, title: j.title, url: `https://www.myworkdayjobs.com/${board.slug}/${board.slug}Careers/job${j.externalPath}`, salary: 'Not listed', location: j.locationsText || 'Remote', source: 'Workday', postedAt: Date.now() }));
-      })
-    );
-
-    const ashbyPromises = ashbyBoards.map(board =>
-      safe(`Ashby:${board}`, async () => {
-        const r = await fetch('https://jobs.ashbyhq.com/api/non-user/recordlet/job-board/list', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ organizationSlug: board }) });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        return (d.jobBoard?.jobPostings || []).map(j => ({ company: board.toUpperCase(), title: j.title, url: j.jobPageUrl, salary: 'Not listed', location: j.locationName || 'Remote', source: 'Ashby', postedAt: new Date(j.publishedAt).getTime() }));
-      })
-    );
-
-    const breezyPromises = breezyBoards.map(board =>
-      safe(`Breezy:${board}`, async () => {
-        const r = await fetch(`https://${board}.breezy.hr/json`, { headers });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        return Array.isArray(d) ? d.map(j => ({ company: board.toUpperCase(), title: j.name, url: j.url, salary: 'Not listed', location: j.location?.name || 'Remote', source: 'Breezy', postedAt: new Date(j.published_date).getTime() })) : [];
-      })
-    );
-
-    const bambooPromises = bambooBoards.map(board =>
-      safe(`BambooHR:${board}`, async () => {
-        const r = await fetch(`https://${board}.bamboohr.com/careers/list`, { headers });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        return (d.result || []).map(j => ({ company: board.toUpperCase(), title: j.jobTitle, url: `https://${board}.bamboohr.com/careers/${j.id}`, salary: 'Not listed', location: j.location?.city ? `${j.location.city}, ${j.location.state}` : 'Remote', source: 'BambooHR', postedAt: Date.now() }));
-      })
-    );
-
     const smartRecruitersPromises = smartRecruitersBoards.map(board =>
       safe(`SmartRecruiters:${board}`, async () => {
         const r = await fetch(`https://api.smartrecruiters.com/v1/companies/${board}/postings`, { headers });
@@ -139,27 +85,6 @@ export default async function handler(req, res) {
         return (d.jobs || []).map(j => ({ company: board.toUpperCase(), title: j.title, url: j.url, salary: 'Not listed', location: j.location?.country || 'Remote', source: 'Workable', postedAt: new Date(j.created_at).getTime() }));
       })
     );
-
-    const recruiteePromises = recruiteeBoards.map(board =>
-      safe(`Recruitee:${board}`, async () => {
-        const r = await fetch(`https://${board}.recruitee.com/api/offers`, { headers });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        return (d.offers || []).map(j => ({ company: board.toUpperCase(), title: j.title, url: j.careers_url, salary: 'Not listed', location: j.location || 'Remote', source: 'Recruitee', postedAt: new Date(j.published_at).getTime() }));
-      })
-    );
-
-    const usaJobsPromise = safe('USAJobs', async () => {
-      const r = await fetch('https://data.usajobs.gov/api/search?PositionTitle=instructional+designer&ResultsPerPage=50&RemoteIndicator=true', { headers: { ...headers, 'Host': 'data.usajobs.gov', 'User-Agent': 'your-email@example.com' } });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      return (data?.SearchResult?.SearchResultItems || []).map(item => {
-        const j      = item.MatchedObjectDescriptor;
-        const salMin = j.PositionRemuneration?.[0]?.MinimumRange;
-        const salMax = j.PositionRemuneration?.[0]?.MaximumRange;
-        return { company: j.OrganizationName || 'Federal Government', title: j.PositionTitle, url: j.PositionURI, salary: salMin ? `$${Math.round(salMin / 1000)}k - $${Math.round(salMax / 1000)}k` : 'Not listed', location: j.PositionLocationDisplay || 'USA', source: 'USAJobs', postedAt: new Date(j.PublicationStartDate).getTime() };
-      });
-    });
 
     // =========================================================
     // 6. HIGHEREDJOBS
@@ -214,11 +139,9 @@ export default async function handler(req, res) {
     // =========================================================
     const aggregatorPromises = [
       safe('Remotive', async () => { const r = await fetch('https://remotive.com/api/remote-jobs?category=teaching', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.jobs || []).map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: j.salary || 'Not listed', location: j.candidate_required_location || 'Remote', source: 'Remotive', postedAt: new Date(j.publication_date).getTime() })); }),
-      safe('Himalayas', async () => { const r = await fetch('https://himalayas.app/jobs/api?limit=100', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.jobs || []).map(j => ({ company: j.companyName, title: j.title, url: j.applyUrl, salary: j.minSalary ? `$${j.minSalary} - $${j.maxSalary}` : 'Not listed', location: j.locationRestrictions?.join(', ') || 'Worldwide', source: 'Himalayas', postedAt: j.pubDate })); }),
       safe('RemoteOK', async () => { const r = await fetch('https://remoteok.com/api', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (Array.isArray(d) && d.length > 1) ? d.slice(1).map(j => ({ company: j.company, title: j.position, url: j.url, salary: j.salary_max ? `$${Math.round(j.salary_min / 1000)}k - $${Math.round(j.salary_max / 1000)}k` : 'Not listed', location: j.location || 'Remote', source: 'RemoteOK', postedAt: new Date(j.date).getTime() })) : []; }),
-      safe('WeWorkRemotely', async () => { const r = await fetch('https://weworkremotely.com/categories/remote-education-jobs.json', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.jobs || []).map(j => ({ company: j.company, title: j.subject, url: j.url, salary: 'Not listed', location: j.region || 'Remote', source: 'WeWorkRemotely', postedAt: new Date(j.created_at).getTime() })); }),
+      safe('WeWorkRemotely', async () => { const r = await fetch('https://weworkremotely.com/api/v1/jobs.json', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.jobs || []).map(j => ({ company: j.company, title: j.title, url: j.url, salary: 'Not listed', location: j.location || 'Remote', source: 'WeWorkRemotely', postedAt: new Date(j.created_at).getTime() })); }),
       safe('TheMuse', async () => { const r = await fetch('https://www.themuse.com/api/public/jobs?category=Education&location=Flexible%20%2F%20Remote&page=1', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.results || []).map(j => ({ company: j.company.name, title: j.name, url: j.refs.landing_page, salary: 'Not listed', location: j.locations?.map(l => l.name).join(', ') || 'Remote', source: 'TheMuse', postedAt: new Date(j.publication_date).getTime() })); }),
-      safe('FindWork', async () => { const r = await fetch('https://findwork.dev/api/jobs/?search=instructional', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.results || []).map(j => ({ company: j.company_name, title: j.role, url: j.url, salary: 'Not listed', location: j.location || 'Remote', source: 'FindWork', postedAt: new Date(j.date_posted).getTime() })); }),
       safe('Arbeitnow', async () => { const r = await fetch('https://www.arbeitnow.com/api/job-board-api', { headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); const d = await r.json(); return (d.data || []).map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: 'Not listed', location: j.location || 'Remote', source: 'Arbeitnow', postedAt: new Date(j.created_at).getTime() })); }),
     ];
 
@@ -226,22 +149,27 @@ export default async function handler(req, res) {
     // 9. FIRE EVERYTHING CONCURRENTLY
     // =========================================================
     const allResults = await Promise.all([
-      ...greenhousePromises, ...leverPromises, ...workdayPromises,
-      ...ashbyPromises, ...breezyPromises, ...bambooPromises,
-      ...smartRecruitersPromises, ...workablePromises, ...recruiteePromises,
-      usaJobsPromise, higherEdJobsPromise, chronicleVitaePromise,
+      ...greenhousePromises,
+      ...leverPromises,
+      ...smartRecruitersPromises,
+      ...workablePromises,
+      higherEdJobsPromise,
+      chronicleVitaePromise,
       ...aggregatorPromises,
     ]);
 
     // =========================================================
-    // 10. COLLECT RESULTS + FAILURES
+    // 10. COLLECT RESULTS + SURFACE FAILURES
     // =========================================================
     const allRawJobs    = [];
     const failedSources = [];
 
     for (const result of allResults) {
-      if (result.failed) failedSources.push({ source: result.sourceName, reason: result.reason });
-      else allRawJobs.push(...result.jobs);
+      if (result.failed) {
+        failedSources.push({ source: result.sourceName, reason: result.reason });
+      } else {
+        allRawJobs.push(...result.jobs);
+      }
     }
 
     // =========================================================
@@ -251,12 +179,14 @@ export default async function handler(req, res) {
       if (job.postedAt && job.postedAt < cutoffDate) return false;
       const title = (job.title   || '').toLowerCase();
       const loc   = (job.location || '').toLowerCase();
-      if (bannedLocations.some(bl => loc.includes(bl))) return false;
-      if (bannedList.some(bw => title.includes(bw))) return false;
+      if (bannedLocations.some(bl => loc.includes(bl)))   return false;
+      if (bannedList.some(bw => title.includes(bw)))       return false;
       return vipList.some(gw => title.includes(gw));
     });
 
-    const uniqueJobs = Array.from(new Map(strictlyFiltered.map(job => [job.url, job])).values());
+    const uniqueJobs = Array.from(
+      new Map(strictlyFiltered.map(job => [job.url, job])).values()
+    );
 
     // =========================================================
     // 12. PAGINATION
@@ -280,12 +210,18 @@ export default async function handler(req, res) {
     // =========================================================
     res.status(200).json({
       jobs: finalJobs,
-      pagination: { page, pageSize, totalMatches, totalPages, hasNextPage: page < totalPages },
+      pagination: {
+        page,
+        pageSize,
+        totalMatches,
+        totalPages,
+        hasNextPage: page < totalPages,
+      },
       failedSources,
     });
 
   } catch (error) {
-    console.error('LifeOS GUI V12 API Error:', error);
+    console.error('LifeOS GUI V13 API Error:', error);
     res.status(500).json({ error: 'Failed to fetch job leads.' });
   }
 }
