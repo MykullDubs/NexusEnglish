@@ -24,15 +24,8 @@ export default async function handler(req, res) {
     const bannedLocations = rawLocations.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
     // =========================================================
-    // 2. SOURCE CONFIGURATIONS
+    // 2. SAFE WRAPPER
     // =========================================================
-    const greenhouseBoards = [
-      'coursera', 'duolingo', 'masterclass', 'udemy', 'ixllearning', 'thinkific', 'hone', 'datacamp'
-    ];
-    const leverBoards = ['edpuzzle'];
-    const workableBoards = ['edmentum'];
-    const smartRecruitersBoards = ['canva'];
-
     const safe = (sourceName, asyncFn) =>
       asyncFn()
         .then(jobs  => ({ sourceName, jobs, failed: false }))
@@ -41,6 +34,11 @@ export default async function handler(req, res) {
     // =========================================================
     // 3. ATS FETCHERS
     // =========================================================
+    const greenhouseBoards = ['coursera', 'duolingo', 'masterclass', 'udemy', 'ixllearning', 'thinkific', 'hone', 'datacamp'];
+    const leverBoards = ['edpuzzle'];
+    const workableBoards = ['edmentum'];
+    const smartRecruitersBoards = ['canva'];
+
     const greenhousePromises = greenhouseBoards.map(board =>
       safe(`Greenhouse:${board}`, async () => {
         const r = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs`, { headers });
@@ -78,68 +76,63 @@ export default async function handler(req, res) {
     );
 
     // =========================================================
-    // 4. RSS FEED FETCHERS (HigherEd, Chronicle, WeWorkRemotely)
+    // 4. RSS SUPER-AGGREGATOR (The Bulletproof Feeds)
     // =========================================================
-    const higherEdJobsPromise = safe('HigherEdJobs', async () => {
-      const feeds = ['https://www.higheredjobs.com/rss/articleFeed.cfm?PosType=1&CatType=55', 'https://www.higheredjobs.com/rss/articleFeed.cfm?PosType=1&CatType=19', 'https://www.higheredjobs.com/rss/articleFeed.cfm?PosType=1&CatType=27'];
-      const xmlResults = await Promise.allSettled(feeds.map(url => fetch(url, { headers })));
-      const jobs = [];
-      for (const result of xmlResults) {
-        if (result.status !== 'fulfilled' || !result.value.ok) continue;
-        const xml   = await result.value.text();
-        const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-        for (const item of items) {
-          const title    = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || item.match(/<title>(.*?)<\/title>/)?.[1] || '').trim();
-          const link     = (item.match(/<link>(.*?)<\/link>/)?.[1] || '').trim();
-          const company  = (item.match(/<source[^>]*>(.*?)<\/source>/)?.[1] || item.match(/<author>(.*?)<\/author>/)?.[1] || 'Higher Ed').replace(/<\/?[^>]+(>|$)/g, '').trim();
-          const pubDate  = (item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '').trim();
-          const locHint  = (item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] || '').match(/([A-Z][a-z]+(?: [A-Z][a-z]+)*,\s*[A-Z]{2})/)?.[1];
-          if (!title || !link) continue;
-          jobs.push({ company, title: title.replace(/<\/?[^>]+(>|$)/g, ''), url: link, salary: 'Not listed', location: locHint || 'USA', source: 'HigherEdJobs', postedAt: pubDate ? new Date(pubDate).getTime() : Date.now() });
-        }
-      }
-      return jobs;
-    });
+    const rssFeeds = [
+      { name: 'Remote.co', url: 'https://remote.co/remote-jobs/feed/' },
+      { name: 'DailyRemote', url: 'https://dailyremote.com/remote-jobs.rss' },
+      { name: 'NoDesk', url: 'https://nodesk.co/remote-jobs/rss.xml' },
+      { name: 'Jobspresso', url: 'https://jobspresso.co/feed/' },
+      { name: 'AuthenticJobs', url: 'https://authenticjobs.com/rss' },
+      { name: 'HigherEdJobs(Tech)', url: 'https://www.higheredjobs.com/rss/articleFeed.cfm?PosType=1&CatType=55' },
+      { name: 'HigherEdJobs(EdTech)', url: 'https://www.higheredjobs.com/rss/articleFeed.cfm?PosType=1&CatType=19' },
+      { name: 'HigherEdJobs(Online)', url: 'https://www.higheredjobs.com/rss/articleFeed.cfm?PosType=1&CatType=27' },
+      { name: 'Chronicle(ID)', url: 'https://chroniclevitae.com/job_search/jobs.rss?job_search%5Bquery%5D=instructional+designer' },
+      { name: 'Chronicle(eLearning)', url: 'https://chroniclevitae.com/job_search/jobs.rss?job_search%5Bquery%5D=elearning' },
+      { name: 'WeWorkRemotely', url: 'https://weworkremotely.com/remote-jobs.rss' }
+    ];
 
-    const chronicleVitaePromise = safe('Chronicle Vitae', async () => {
-      const feeds = ['https://chroniclevitae.com/job_search/jobs.rss?job_search%5Bquery%5D=instructional+designer', 'https://chroniclevitae.com/job_search/jobs.rss?job_search%5Bquery%5D=elearning'];
-      const xmlResults = await Promise.allSettled(feeds.map(url => fetch(url, { headers })));
+    const universalRssPromise = safe('RSS Super-Aggregator', async () => {
+      const xmlResults = await Promise.allSettled(rssFeeds.map(feed => fetch(feed.url, { headers }).then(r => r.text().then(xml => ({ feedName: feed.name, xml })))));
       const jobs = [];
+
       for (const result of xmlResults) {
-        if (result.status !== 'fulfilled' || !result.value.ok) continue;
-        const xml   = await result.value.text();
+        if (result.status !== 'fulfilled') continue;
+        const { feedName, xml } = result.value;
         const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+
         for (const item of items) {
-          const title    = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || item.match(/<title>(.*?)<\/title>/)?.[1] || '').trim();
+          const rawTitle = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || item.match(/<title>(.*?)<\/title>/)?.[1] || '').trim();
           const link     = (item.match(/<link>\s*(https?:\/\/[^\s<]+)/)?.[1] || item.match(/<guid[^>]*>\s*(https?:\/\/[^\s<]+)/)?.[1] || '').trim();
-          const company  = (item.match(/<cv:employer[^>]*>(.*?)<\/cv:employer>/)?.[1] || 'University').replace(/<\/?[^>]+(>|$)/g, '').trim();
           const pubDate  = (item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '').trim();
-          if (!title || !link) continue;
-          jobs.push({ company, title: title.replace(/<\/?[^>]+(>|$)/g, ''), url: link, salary: 'Not listed', location: 'USA', source: 'Chronicle Vitae', postedAt: pubDate ? new Date(pubDate).getTime() : Date.now() });
+          
+          if (!rawTitle || !link) continue;
+
+          // Clean up titles and extract company names. 
+          // Many RSS feeds format titles as "Company Name: Job Title" or "Job Title at Company Name"
+          let title = rawTitle.replace(/<\/?[^>]+(>|$)/g, '').trim();
+          let company = feedName; // Fallback to the board name
+          
+          if (title.includes(' at ')) {
+            const parts = title.split(' at ');
+            title = parts[0].trim();
+            company = parts[1].trim();
+          } else if (title.includes(':')) {
+            const parts = title.split(':');
+            company = parts[0].trim();
+            title = parts.slice(1).join(':').trim();
+          }
+
+          jobs.push({ 
+            company, 
+            title, 
+            url: link, 
+            salary: 'Not listed', 
+            location: 'Remote', 
+            source: feedName, 
+            postedAt: pubDate ? new Date(pubDate).getTime() : Date.now() 
+          });
         }
-      }
-      return jobs;
-    });
-
-    // --- NEW WE WORK REMOTELY RSS PARSER ---
-    const weWorkRemotelyPromise = safe('WeWorkRemotely', async () => {
-      const r = await fetch('https://weworkremotely.com/remote-jobs.rss', { headers });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const xml = await r.text();
-      const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-      const jobs = [];
-      for (const item of items) {
-        const rawTitle = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || item.match(/<title>(.*?)<\/title>/)?.[1] || '').trim();
-        const link     = (item.match(/<link>(.*?)<\/link>/)?.[1] || '').trim();
-        const pubDate  = (item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '').trim();
-        if (!rawTitle || !link) continue;
-        
-        // WWR formats titles as "Company Name: Job Title"
-        const titleParts = rawTitle.replace(/<\/?[^>]+(>|$)/g, '').split(':');
-        const company = titleParts.length > 1 ? titleParts[0].trim() : 'WeWorkRemotely';
-        const title = titleParts.length > 1 ? titleParts.slice(1).join(':').trim() : rawTitle;
-
-        jobs.push({ company, title, url: link, salary: 'Not listed', location: 'Remote', source: 'WeWorkRemotely', postedAt: pubDate ? new Date(pubDate).getTime() : Date.now() });
       }
       return jobs;
     });
@@ -162,9 +155,7 @@ export default async function handler(req, res) {
       ...leverPromises,
       ...smartRecruitersPromises,
       ...workablePromises,
-      higherEdJobsPromise,
-      chronicleVitaePromise,
-      weWorkRemotelyPromise,
+      universalRssPromise,
       ...aggregatorPromises,
     ]);
 
@@ -220,7 +211,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('LifeOS GUI V13 API Error:', error);
+    console.error('LifeOS GUI V14 API Error:', error);
     res.status(500).json({ error: 'Failed to fetch job leads.' });
   }
 }
