@@ -402,7 +402,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
               return (
                 <div
                   key={stage.id}
-                  className={`w-[85%] shrink-0 snap-center bg-slate-50/50 border ${stage.border} rounded-[28px] flex flex-col max-h-[65vh]`}
+                  className={`w-[85%] shrink-0 snap-center snap-always bg-slate-50/50 border ${stage.border} rounded-[28px] flex flex-col max-h-[65vh]`}
                 >
                   <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white/50 rounded-t-[28px]">
                     <div className="flex items-center gap-2">
