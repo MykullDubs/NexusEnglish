@@ -1,18 +1,24 @@
 // api/fetchJobs.js
 export default async function handler(req, res) {
   try {
-    const headers = { 'User-Agent': 'LifeOS-MessiahPipeline/4.0' };
+    const headers = { 'User-Agent': 'LifeOS-Messiah-V5/5.0' };
 
-    // 1. THE MASSIVE EDTECH HIT LIST (Direct Applicant Tracking Systems)
-    // We expanded this to 18 of the biggest EdTech players globally.
+    // 1. THE TITANIC EDTECH HIT LIST (Big Players + The Ascendant 20)
     const greenhouseBoards = [
+      // The Giants
       'coursera', 'duolingo', 'masterclass', 'guildeducation', 'udemy', 
       'quizlet', 'articulate', 'instructure', 'chegg', 'amplify', 
-      'ixllearning', 'teachable', 'thinkific', 'goguardian', 'betterup'
+      'ixllearning', 'teachable', 'thinkific', 'goguardian', 'betterup',
+      // The Up-and-Comers (Greenhouse)
+      'synthesis', 'degreed', 'coachhub', 'remind', 'mainstay', 
+      'preply', 'lingoda', 'elsa', 'busuu', 'hone', 'section', 'rivo'
     ];
     
     const leverBoards = [
-      'outschool', 'khanacademy', 'edpuzzle', 'seesaw', 'varsitytutors'
+      // The Giants
+      'outschool', 'khanacademy', 'edpuzzle', 'seesaw', 'varsitytutors',
+      // The Up-and-Comers (Lever)
+      'paper', 'swingeducation', 'loora', 'kyronlearning', 'labster', 'springboard'
     ];
 
     const greenhouseFetches = greenhouseBoards.map(board => 
@@ -32,7 +38,6 @@ export default async function handler(req, res) {
       fetch('https://remoteok.com/api', { headers })
     ];
 
-    // Fire all 23 API requests simultaneously!
     const allResponses = await Promise.allSettled([
       ...greenhouseFetches, 
       ...leverFetches, 
@@ -53,7 +58,7 @@ export default async function handler(req, res) {
               url: j.absolute_url,
               salary: "Not listed",
               location: j.location?.name || "Remote",
-              source: "ATS"
+              source: "Direct ATS"
             })));
           }
         } catch(e) {}
@@ -73,7 +78,7 @@ export default async function handler(req, res) {
               url: j.hostedUrl,
               salary: "Not listed",
               location: j.categories?.location || "Remote",
-              source: "ATS"
+              source: "Direct ATS"
             })));
           }
         } catch(e) {}
@@ -83,36 +88,29 @@ export default async function handler(req, res) {
     // --- 5. HARVEST AGGREGATORS ---
     const aggStart = leverStart + leverBoards.length;
     
-    // Remotive
     if (allResponses[aggStart].status === 'fulfilled') {
-      try { const data = await allResponses[aggStart].value.json(); if (data.jobs) allRawJobs.push(...data.jobs.map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: j.salary || "Not listed", location: j.candidate_required_location || "", source: "Remotive" }))); } catch(e) {}
+      try { const d = await allResponses[aggStart].value.json(); if (d.jobs) allRawJobs.push(...d.jobs.map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: j.salary || "Not listed", location: j.candidate_required_location || "", source: "Remotive" }))); } catch(e) {}
     }
-    // Jobicy
     if (allResponses[aggStart + 1].status === 'fulfilled') {
-      try { const data = await allResponses[aggStart + 1].value.json(); if (data.jobs) allRawJobs.push(...data.jobs.map(j => ({ company: j.companyName, title: j.jobTitle, url: j.url, salary: j.annualSalaryMax ? `$${j.annualSalaryMin} - $${j.annualSalaryMax}` : "Not listed", location: j.jobGeo || "", source: "Jobicy" }))); } catch(e) {}
+      try { const d = await allResponses[aggStart + 1].value.json(); if (d.jobs) allRawJobs.push(...d.jobs.map(j => ({ company: j.companyName, title: j.jobTitle, url: j.url, salary: j.annualSalaryMax ? `$${j.annualSalaryMin} - $${j.annualSalaryMax}` : "Not listed", location: j.jobGeo || "", source: "Jobicy" }))); } catch(e) {}
     }
-    // Himalayas
     if (allResponses[aggStart + 2].status === 'fulfilled') {
-      try { const data = await allResponses[aggStart + 2].value.json(); if (data.jobs) allRawJobs.push(...data.jobs.map(j => ({ company: j.companyName, title: j.title, url: j.applyUrl, salary: j.minSalary ? `$${j.minSalary} - $${j.maxSalary}` : "Not listed", location: j.locationRestrictions?.join(', ') || "Worldwide", source: "Himalayas" }))); } catch(e) {}
+      try { const d = await allResponses[aggStart + 2].value.json(); if (d.jobs) allRawJobs.push(...d.jobs.map(j => ({ company: j.companyName, title: j.title, url: j.applyUrl, salary: j.minSalary ? `$${j.minSalary} - $${j.maxSalary}` : "Not listed", location: j.locationRestrictions?.join(', ') || "Worldwide", source: "Himalayas" }))); } catch(e) {}
     }
-    // The Muse
     if (allResponses[aggStart + 3].status === 'fulfilled') {
-      try { const data = await allResponses[aggStart + 3].value.json(); if (data.results) allRawJobs.push(...data.results.map(j => ({ company: j.company.name, title: j.name, url: j.refs.landing_page, salary: "Not listed", location: j.locations?.map(l=>l.name).join(', ') || "", source: "The Muse" }))); } catch(e) {}
+      try { const d = await allResponses[aggStart + 3].value.json(); if (d.results) allRawJobs.push(...d.results.map(j => ({ company: j.company.name, title: j.name, url: j.refs.landing_page, salary: "Not listed", location: j.locations?.map(l=>l.name).join(', ') || "", source: "The Muse" }))); } catch(e) {}
     }
-    // RemoteOK
     if (allResponses[aggStart + 4].status === 'fulfilled') {
-      try { const data = await allResponses[aggStart + 4].value.json(); if (Array.isArray(data) && data.length > 1) allRawJobs.push(...data.slice(1).map(j => ({ company: j.company, title: j.position, url: j.url, salary: j.salary_max ? `$${Math.round(j.salary_min/1000)}k - $${Math.round(j.salary_max/1000)}k` : "Not listed", location: j.location || "", source: "RemoteOK" }))); } catch(e) {}
+      try { const d = await allResponses[aggStart + 4].value.json(); if (Array.isArray(d) && d.length > 1) allRawJobs.push(...d.slice(1).map(j => ({ company: j.company, title: j.position, url: j.url, salary: j.salary_max ? `$${Math.round(j.salary_min/1000)}k - $${Math.round(j.salary_max/1000)}k` : "Not listed", location: j.location || "", source: "RemoteOK" }))); } catch(e) {}
     }
 
-    // --- 6. THE MESSIAH BOUNCER ---
-    // Massively expanded the VIP list.
+    // --- 6. THE SUPER-BEEFED BOUNCER ---
     const vipList = [
       'instructional', 'curriculum', 'esl', 'edtech', 'e-learning', 'elearning', 
       'lxd', 'learning experience', 'educational', 'l&d', 'learning', 'education', 
       'trainer', 'training', 'subject matter expert', 'sme', 'course', 'bilingual', 'teacher', 'educator'
     ];
     
-    // Banned words (Machine Learning is banned, so it safely filters out the software engineers)
     const bannedList = [
       'machine learning', 'deep learning', 'sales', 'marketing', 'engineer', 
       'software', 'developer', 'account executive', 'customer success', 'data scientist', 
@@ -125,22 +123,17 @@ export default async function handler(req, res) {
       const title = job.title.toLowerCase();
       const loc = job.location.toLowerCase();
 
-      // Rule 1: No bad timezones
       if (bannedLocations.some(badLoc => loc.includes(badLoc))) return false;
-      // Rule 2: No Software/Sales/Management noise
       if (bannedList.some(badWord => title.includes(badWord))) return false;
-      // Rule 3: Must be an education/training role
       return vipList.some(goodWord => title.includes(goodWord));
     });
 
-    // --- 7. CLEANUP & EXPORT ---
     const uniqueJobs = Array.from(new Map(strictlyFiltered.map(job => [job.url, job])).values());
 
     if (uniqueJobs.length === 0) {
       return res.status(200).json({ jobs: [] });
     }
 
-    // Bumped to return the top 50 matches so you have plenty to swipe on
     const finalJobs = uniqueJobs.slice(0, 50).map(job => ({
       company: job.company,
       role: job.title.replace(/<\/?[^>]+(>|$)/g, ""), 
@@ -152,7 +145,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ jobs: finalJobs });
   } catch (error) {
-    console.error("Messiah API Error:", error);
+    console.error("Messiah V5 API Error:", error);
     res.status(500).json({ error: "Failed to fetch job leads." });
   }
 }
