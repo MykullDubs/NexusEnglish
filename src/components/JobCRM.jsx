@@ -3,7 +3,7 @@ import {
   Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle,
   Pencil, Download, Loader2, X, Check, ArrowRight, FileText, Circle,
   GripVertical, Copy, UserCircle, Palette, Eye, EyeOff, PlusCircle, Edit3,
-  AlignLeft
+  AlignLeft, Shield, Settings
 } from 'lucide-react';
 import {
   collection, addDoc, deleteDoc, doc, onSnapshot, query,
@@ -32,6 +32,12 @@ const INITIAL_HEADER = {
   links: "github.com/yourusername • linkedin.com/in/you"
 };
 
+const INITIAL_BOUNCER = {
+  vip: "instructional, curriculum, esl, edtech, e-learning, elearning, lxd, learning experience, educational, l&d, learning, education, trainer, training, subject matter expert, sme, course, bilingual, teacher, educator, lms, technologist, localization, linguist, frontend, front-end, react, web developer, learning engineer, javascript",
+  banned: "machine learning, deep learning, sales, marketing, data scientist, backend, data engineer, account executive, customer success, manager, director, vp, head, principal, counsel, finance, payroll",
+  locations: "uk only, europe, emea, apac, asia, uk/eu, india, australia, philippines"
+};
+
 const INITIAL_RESUME_BLOCKS = [
   { id: 'skills', type: 'Skills', title: 'Technical Stack & Languages', date: '', bullets: ['Bilingual: Native English & Fluent Spanish', 'Web Development: React, Next.js, JavaScript, HTML, CSS, Firebase', 'Instructional Design: Curriculum Development, Storyboarding, e-Learning Modules'], active: true },
   { id: 'exp1',   type: 'Experience', title: 'English Teacher | TeachCast', date: 'Oct 2025 - Present', bullets: ['Deliver dynamic, high-engagement ESL instruction to remote students.', 'Utilize digital classroom tools and phonetic mechanics to improve pronunciation.'], active: true },
@@ -44,6 +50,7 @@ const INITIAL_RESUME_BLOCKS = [
 ];
 
 const RESUME_DOC = (uid) => `users/${uid}/settings/resumeEngine`;
+const BOUNCER_DOC = (uid) => `users/${uid}/settings/bouncer`;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,14 +81,14 @@ function StageDots({ total, active }) {
 export default function JobCRM({ user, showToast, askConfirm }) {
 
   // --- View State ---
-  const [activeView, setActiveView]       = useState('kanban'); 
+  const [activeView, setActiveView]       = useState('kanban'); // 'kanban' | 'remixer' | 'bouncer'
   const [activeStageIdx, setActiveStageIdx] = useState(0);
 
   // --- Pipeline State ---
   const [jobs, setJobs]           = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [isModalOpen, setIsModalOpen]     = useState(false);
-  const [viewingJob, setViewingJob]       = useState(null); // <--- NEW: View Modal State
+  const [viewingJob, setViewingJob]       = useState(null); 
   const [ptTime, setPtTime]               = useState("");
   const [isFetching, setIsFetching]       = useState(false);
   const [fetchDays, setFetchDays]         = useState(7); 
@@ -95,6 +102,10 @@ export default function JobCRM({ user, showToast, askConfirm }) {
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(true);
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
   const [blockForm, setBlockForm]                 = useState(null);
+
+  // --- Bouncer State ---
+  const [bouncer, setBouncer] = useState(INITIAL_BOUNCER);
+  const [isSavingBouncer, setIsSavingBouncer] = useState(false);
 
   // ── Live Pacific Time ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -115,19 +126,28 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     return () => unsub();
   }, [user]);
 
+  // Load Resume & Bouncer Settings
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
-        const snap = await getDoc(doc(db, RESUME_DOC(user.uid)));
-        if (snap.exists()) {
-          const data = snap.data();
+        const [resSnap, bouncerSnap] = await Promise.all([
+          getDoc(doc(db, RESUME_DOC(user.uid))),
+          getDoc(doc(db, BOUNCER_DOC(user.uid)))
+        ]);
+        
+        if (resSnap.exists()) {
+          const data = resSnap.data();
           if (data.header) setHeader(data.header);
           if (data.blocks) setBlocks(data.blocks);
           if (data.theme) setTheme(data.theme);
         } else {
           const oldSnap = await getDoc(doc(db, `users/${user.uid}/settings/resumeBlocks`));
           if (oldSnap.exists()) setBlocks(oldSnap.data().blocks ?? INITIAL_RESUME_BLOCKS);
+        }
+
+        if (bouncerSnap.exists()) {
+          setBouncer(bouncerSnap.data());
         }
       } catch (e) {} finally { setIsLoadingBlocks(false); }
     })();
@@ -139,12 +159,32 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     catch (e) { showToast("Couldn't save resume state.", "error"); }
   }, [user, showToast]);
 
+  const handleSaveBouncer = async () => {
+    if (!user) return;
+    setIsSavingBouncer(true);
+    try {
+      await setDoc(doc(db, BOUNCER_DOC(user.uid)), bouncer);
+      showToast("Bouncer rules updated!", "success");
+    } catch (e) { showToast("Error saving rules.", "error"); }
+    setIsSavingBouncer(false);
+  };
+
   // ── Job Actions ────────────────────────────────────────────────────────────
   const fetchLeads = async () => {
     if (!user) return;
     setIsFetching(true);
     try {
-      const res  = await fetch(`/api/fetchJobs?days=${fetchDays}`);
+      // NEW: We now send a POST request with your custom Bouncer UI rules
+      const res = await fetch('/api/fetchJobs', {
+        method: 'POST',
+        body: JSON.stringify({
+          days: fetchDays,
+          vip: bouncer.vip,
+          banned: bouncer.banned,
+          locations: bouncer.locations
+        })
+      });
+      
       const data = await res.json();
       if (data.error) { showToast(data.error, "error"); setIsFetching(false); return; }
 
@@ -184,7 +224,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     const currentIdx = STAGES.findIndex(s => s.id === jobStageId);
     if (currentIdx < 0 || currentIdx >= STAGES.length - 1) return;
     await updateDoc(doc(db, `users/${user.uid}/jobs`, id), { stage: STAGES[currentIdx + 1].id, updatedAt: Timestamp.now() });
-    setViewingJob(null); // Close modal if moving from inside details view
+    setViewingJob(null); 
   };
   
   const fastDiscardLead = async (id) => { await deleteDoc(doc(db, `users/${user.uid}/jobs`, id)); setViewingJob(null); };
@@ -254,9 +294,11 @@ export default function JobCRM({ user, showToast, askConfirm }) {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12 h-full flex flex-col">
 
-      {/* ── Top Header Row ─────────────────────────────────────────────────── */}
+      {/* ── Top Header Row (Dashboard Slider) ────────────────────────────────── */}
       <div className="flex gap-4 overflow-x-auto snap-x scrollbar-hide pb-2 shrink-0 w-full no-print">
-        <div onClick={() => setActiveView('kanban')} className={`w-[85%] snap-center shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'kanban' ? 'bg-white border-indigo-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
+        
+        {/* Card 1: Job Pipeline */}
+        <div onClick={() => setActiveView('kanban')} className={`w-[85%] snap-center snap-always shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'kanban' ? 'bg-white border-indigo-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full"><Briefcase size={28} /></div>
@@ -282,7 +324,8 @@ export default function JobCRM({ user, showToast, askConfirm }) {
           </div>
         </div>
 
-        <div onClick={() => setActiveView('remixer')} className={`w-[85%] snap-center shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'remixer' ? 'bg-white border-emerald-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
+        {/* Card 2: Resume Engine */}
+        <div onClick={() => setActiveView('remixer')} className={`w-[85%] snap-center snap-always shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'remixer' ? 'bg-white border-emerald-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full"><FileText size={28} /></div>
@@ -291,6 +334,19 @@ export default function JobCRM({ user, showToast, askConfirm }) {
           </div>
           <button onClick={(e) => { e.stopPropagation(); handleExportPDF(); }} className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition-colors active:scale-95 shadow-sm flex justify-center items-center gap-2">
             <Download size={20} /><span className="text-xs font-bold uppercase tracking-wider">Export PDF</span>
+          </button>
+        </div>
+
+        {/* Card 3: The Bouncer */}
+        <div onClick={() => setActiveView('bouncer')} className={`w-[85%] snap-center snap-always shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'bouncer' ? 'bg-white border-rose-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-full"><Shield size={28} /></div>
+              <div><h2 className="text-xl font-black text-slate-900 tracking-tight">Bouncer</h2><div className="text-slate-500 font-medium text-xs mt-0.5">Algorithm API Filters</div></div>
+            </div>
+          </div>
+          <button onClick={(e) => { e.stopPropagation(); setActiveView('bouncer'); }} className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition-colors active:scale-95 shadow-sm flex justify-center items-center gap-2">
+            <Settings size={20} /><span className="text-xs font-bold uppercase tracking-wider">Configure</span>
           </button>
         </div>
       </div>
@@ -362,7 +418,6 @@ export default function JobCRM({ user, showToast, askConfirm }) {
                         </>
                       );
 
-                      // Clicking the card opens the new Job Details Modal
                       if (isInbox) return <motion.div key={job.id} onClick={() => setViewingJob(job)} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.8} onDragEnd={(e, info) => { if (info.offset.x < -100) fastDiscardLead(job.id); else if (info.offset.x > 100) moveJob(job.id, job.stage); }} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 transition-colors group relative cursor-pointer active:cursor-grabbing touch-pan-y">{cardContent}</motion.div>;
                       return <div key={job.id} onClick={() => setViewingJob(job)} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-100 transition-colors group relative cursor-pointer">{cardContent}</div>;
                     })}
@@ -412,9 +467,59 @@ export default function JobCRM({ user, showToast, askConfirm }) {
         </div>
       )}
 
+      {/* ── BOUNCER VIEW ────────────────────────────────────────────────────── */}
+      {activeView === 'bouncer' && (
+        <div className="flex-1 overflow-y-auto space-y-6 no-print scrollbar-hide pb-12 animate-in fade-in slide-in-from-bottom-4 px-1">
+          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 space-y-6">
+            
+            <div>
+              <label className="text-xs font-black uppercase tracking-widest text-emerald-600 ml-1 flex items-center gap-2 mb-2">
+                <CheckCircle size={14}/> VIP Keywords (Include)
+              </label>
+              <textarea 
+                rows="4" 
+                value={bouncer.vip} 
+                onChange={(e) => setBouncer({...bouncer, vip: e.target.value})} 
+                className="w-full bg-white border border-emerald-100 rounded-2xl px-4 py-3 text-sm text-slate-800 font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none leading-relaxed"
+              />
+              <p className="text-[10px] font-medium text-slate-400 ml-1 mt-1">Comma-separated. A job MUST have one of these in the title to enter your inbox.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-black uppercase tracking-widest text-rose-600 ml-1 flex items-center gap-2 mb-2">
+                <X size={14}/> Banned Keywords (Reject)
+              </label>
+              <textarea 
+                rows="3" 
+                value={bouncer.banned} 
+                onChange={(e) => setBouncer({...bouncer, banned: e.target.value})} 
+                className="w-full bg-white border border-rose-100 rounded-2xl px-4 py-3 text-sm text-slate-800 font-medium outline-none focus:ring-2 focus:ring-rose-500/20 resize-none leading-relaxed"
+              />
+              <p className="text-[10px] font-medium text-slate-400 ml-1 mt-1">Jobs with these words in the title will be instantly deleted.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1 flex items-center gap-2 mb-2">
+                <Globe size={14}/> Banned Locations
+              </label>
+              <textarea 
+                rows="2" 
+                value={bouncer.locations} 
+                onChange={(e) => setBouncer({...bouncer, locations: e.target.value})} 
+                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-800 font-medium outline-none focus:ring-2 focus:ring-slate-500/20 resize-none leading-relaxed"
+              />
+            </div>
+
+            <Button onClick={handleSaveBouncer} disabled={isSavingBouncer} className="w-full !bg-slate-900 !mt-2">
+              {isSavingBouncer ? <Loader2 size={18} className="animate-spin mx-auto"/> : "Save Filtering Rules"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ── MODALS ──────────────────────────────────────────────────────────── */}
       
-      {/* 1. Job Details View Modal (NEW) */}
+      {/* Job Details View Modal */}
       <Modal isOpen={!!viewingJob} onClose={() => setViewingJob(null)} title="Job Details">
         {viewingJob && (
           <div className="space-y-6 px-1">
@@ -422,42 +527,27 @@ export default function JobCRM({ user, showToast, askConfirm }) {
               <h2 className="text-2xl font-black text-slate-900 leading-tight">{viewingJob.company}</h2>
               <p className="text-lg font-medium text-indigo-600 mt-1 flex items-center gap-2"><Briefcase size={18}/> {viewingJob.role}</p>
             </div>
-            
             <div className="flex flex-wrap gap-2">
               <div className="px-3 py-1.5 bg-slate-50 text-slate-600 font-bold text-sm rounded-xl border border-slate-200 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-slate-400"></span> {STAGES.find(s => s.id === viewingJob.stage)?.label || "Saved"}
               </div>
-              {viewingJob.salary && (
-                <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 font-bold text-sm rounded-xl border border-emerald-100">
-                  {viewingJob.salary}
-                </div>
-              )}
+              {viewingJob.salary && <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 font-bold text-sm rounded-xl border border-emerald-100">{viewingJob.salary}</div>}
             </div>
-
             {viewingJob.notes && (
               <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4">
-                <div className="flex items-center gap-2 text-amber-800 font-bold text-xs uppercase tracking-wider mb-2">
-                  <AlignLeft size={14} /> Notes & Details
-                </div>
+                <div className="flex items-center gap-2 text-amber-800 font-bold text-xs uppercase tracking-wider mb-2"><AlignLeft size={14} /> Notes & Details</div>
                 <p className="text-slate-700 text-sm whitespace-pre-wrap leading-relaxed">{viewingJob.notes}</p>
               </div>
             )}
-
             <div className="pt-4 flex gap-3">
-              {viewingJob.url && (
-                <a href={viewingJob.url} target="_blank" rel="noreferrer" className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                  Open Job Post <ExternalLink size={16}/>
-                </a>
-              )}
-              <button onClick={() => { setViewingJob(null); openEdit(viewingJob); }} className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
-                Edit
-              </button>
+              {viewingJob.url && <a href={viewingJob.url} target="_blank" rel="noreferrer" className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">Open Job Post <ExternalLink size={16}/></a>}
+              <button onClick={() => { setViewingJob(null); openEdit(viewingJob); }} className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">Edit</button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* 2. Add / Edit Job Modal */}
+      {/* Add / Edit Job Modal */}
       <Modal isOpen={isModalOpen} onClose={closeModal} title={editingId ? "Edit Job" : "Add Job"}>
         <form onSubmit={handleSaveJob} className="space-y-4">
           <div><label className="text-sm font-bold text-slate-600 ml-1">Company</label><input type="text" placeholder="e.g. Coursera" value={form.company} onChange={(e) => setForm({...form, company: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20" /></div>
@@ -469,7 +559,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
         </form>
       </Modal>
 
-      {/* 3. Resume Header Modal */}
+      {/* Resume Header Modal */}
       <Modal isOpen={isHeaderModalOpen} onClose={() => setIsHeaderModalOpen(false)} title="Edit Header">
         <form onSubmit={saveHeader} className="space-y-4">
           <div><label className="text-sm font-bold text-slate-600 ml-1">Full Name</label><input type="text" value={header.name} onChange={(e) => setHeader({...header, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none" /></div>
@@ -482,7 +572,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
         </form>
       </Modal>
 
-      {/* 4. Block Editor Modal */}
+      {/* Block Editor Modal */}
       {blockForm && (
         <Modal isOpen={!!blockForm} onClose={() => setBlockForm(null)} title={blockForm.id ? "Edit Block" : "New Block"}>
           <form onSubmit={saveBlockForm} className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
@@ -502,7 +592,6 @@ export default function JobCRM({ user, showToast, askConfirm }) {
               <label className="text-sm font-bold text-slate-600 ml-1">Title & Company</label>
               <input type="text" placeholder="e.g. Instructional Designer | Acme Corp" value={blockForm.title} onChange={(e) => setBlockForm({...blockForm, title: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none" required />
             </div>
-            
             <div>
               <div className="flex justify-between items-center mb-2 ml-1">
                 <label className="text-sm font-bold text-slate-600">Bullet Points</label>
