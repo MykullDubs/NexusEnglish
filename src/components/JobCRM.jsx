@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Briefcase, Plus, Clock, Globe, ExternalLink, Trash2, CheckCircle,
   Pencil, Download, Loader2, X, Check, ArrowRight, FileText, Circle,
-  GripVertical, Copy, UserCircle, Palette, Eye, EyeOff, PlusCircle, Edit3
+  GripVertical, Copy, UserCircle, Palette, Eye, EyeOff, PlusCircle, Edit3,
+  AlignLeft
 } from 'lucide-react';
 import {
   collection, addDoc, deleteDoc, doc, onSnapshot, query,
@@ -73,26 +74,25 @@ function StageDots({ total, active }) {
 export default function JobCRM({ user, showToast, askConfirm }) {
 
   // --- View State ---
-  const [activeView, setActiveView]       = useState('kanban'); // 'kanban' | 'remixer'
+  const [activeView, setActiveView]       = useState('kanban'); 
   const [activeStageIdx, setActiveStageIdx] = useState(0);
 
   // --- Pipeline State ---
   const [jobs, setJobs]           = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [isModalOpen, setIsModalOpen]     = useState(false);
+  const [viewingJob, setViewingJob]       = useState(null); // <--- NEW: View Modal State
   const [ptTime, setPtTime]               = useState("");
   const [isFetching, setIsFetching]       = useState(false);
-  const [fetchDays, setFetchDays]         = useState(7); // <--- CHRONO STATE ADDED
+  const [fetchDays, setFetchDays]         = useState(7); 
   const [editingId, setEditingId]         = useState(null);
   const [form, setForm]                   = useState({ company: "", role: "", url: "", stage: "saved", notes: "", salary: "" });
 
   // --- Resume Engine State ---
   const [header, setHeader]             = useState(INITIAL_HEADER);
   const [blocks, setBlocks]             = useState(INITIAL_RESUME_BLOCKS);
-  const [theme, setTheme]               = useState('modern'); // 'modern' | 'classic'
+  const [theme, setTheme]               = useState('modern');
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(true);
-  
-  // Modals for Resume Engine
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
   const [blockForm, setBlockForm]                 = useState(null);
 
@@ -104,7 +104,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     return () => clearInterval(id);
   }, []);
 
-  // ── Firestore Listeners (Jobs) ─────────────────────────────────────────────
+  // ── Firestore Listeners ────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     setIsLoadingJobs(true);
@@ -115,7 +115,6 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     return () => unsub();
   }, [user]);
 
-  // ── Firestore Load (Resume Engine) ─────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -127,7 +126,6 @@ export default function JobCRM({ user, showToast, askConfirm }) {
           if (data.blocks) setBlocks(data.blocks);
           if (data.theme) setTheme(data.theme);
         } else {
-          // Fallback check for old data structure
           const oldSnap = await getDoc(doc(db, `users/${user.uid}/settings/resumeBlocks`));
           if (oldSnap.exists()) setBlocks(oldSnap.data().blocks ?? INITIAL_RESUME_BLOCKS);
         }
@@ -141,12 +139,11 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     catch (e) { showToast("Couldn't save resume state.", "error"); }
   }, [user, showToast]);
 
-  // ── Job Pipeline Actions ───────────────────────────────────────────────────
+  // ── Job Actions ────────────────────────────────────────────────────────────
   const fetchLeads = async () => {
     if (!user) return;
     setIsFetching(true);
     try {
-      // <--- ADDED DAYS PARAMETER HERE
       const res  = await fetch(`/api/fetchJobs?days=${fetchDays}`);
       const data = await res.json();
       if (data.error) { showToast(data.error, "error"); setIsFetching(false); return; }
@@ -187,58 +184,34 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     const currentIdx = STAGES.findIndex(s => s.id === jobStageId);
     if (currentIdx < 0 || currentIdx >= STAGES.length - 1) return;
     await updateDoc(doc(db, `users/${user.uid}/jobs`, id), { stage: STAGES[currentIdx + 1].id, updatedAt: Timestamp.now() });
+    setViewingJob(null); // Close modal if moving from inside details view
   };
-  const fastDiscardLead = async (id) => { await deleteDoc(doc(db, `users/${user.uid}/jobs`, id)); };
-  const deleteJob = (id) => { askConfirm("Delete Job", "Remove this application from your pipeline?", async () => { await deleteDoc(doc(db, `users/${user.uid}/jobs`, id)); showToast("Job deleted.", "success"); }); };
+  
+  const fastDiscardLead = async (id) => { await deleteDoc(doc(db, `users/${user.uid}/jobs`, id)); setViewingJob(null); };
+  
+  const deleteJob = (id) => { 
+    askConfirm("Delete Job", "Remove this application from your pipeline?", async () => { 
+      await deleteDoc(doc(db, `users/${user.uid}/jobs`, id)); 
+      showToast("Job deleted.", "success"); 
+      setViewingJob(null);
+    }); 
+  };
 
   const openAdd   = () => { setForm({ company: "", role: "", url: "", stage: "saved", notes: "", salary: "" }); setEditingId(null); setIsModalOpen(true); };
   const openEdit  = (job) => { setForm({ company: job.company, role: job.role, url: job.url || "", stage: job.stage, notes: job.notes || "", salary: job.salary || "" }); setEditingId(job.id); setIsModalOpen(true); };
   const closeModal = () => { setIsModalOpen(false); setEditingId(null); };
 
   // ── Resume Engine Actions ──────────────────────────────────────────────────
-  const toggleBlockVisibility = (id) => {
-    const updated = blocks.map(b => b.id === id ? { ...b, active: !b.active } : b);
-    setBlocks(updated); persistResume(header, updated, theme);
-  };
-
-  const handleReorderBlocks = (reorderedBlocks) => {
-    setBlocks(reorderedBlocks); persistResume(header, reorderedBlocks, theme);
-  };
-
-  const deleteBlock = (id) => {
-    askConfirm("Delete Block", "Remove this section from your resume builder?", () => {
-      const updated = blocks.filter(b => b.id !== id);
-      setBlocks(updated); persistResume(header, updated, theme);
-    });
-  };
-
-  const saveBlockForm = (e) => {
-    e.preventDefault();
-    let updated;
-    if (blockForm.id) {
-      updated = blocks.map(b => b.id === blockForm.id ? blockForm : b);
-    } else {
-      updated = [...blocks, { ...blockForm, id: `block_${Date.now()}`, active: true }];
-    }
-    setBlocks(updated); persistResume(header, updated, theme);
-    setBlockForm(null);
-  };
-
-  const saveHeader = (e) => {
-    e.preventDefault();
-    persistResume(header, blocks, theme);
-    setIsHeaderModalOpen(false);
-  };
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'modern' ? 'classic' : 'modern';
-    setTheme(newTheme); persistResume(header, blocks, newTheme);
-  };
+  const toggleBlockVisibility = (id) => { const updated = blocks.map(b => b.id === id ? { ...b, active: !b.active } : b); setBlocks(updated); persistResume(header, updated, theme); };
+  const handleReorderBlocks = (reorderedBlocks) => { setBlocks(reorderedBlocks); persistResume(header, reorderedBlocks, theme); };
+  const deleteBlock = (id) => { askConfirm("Delete Block", "Remove this section from your resume builder?", () => { const updated = blocks.filter(b => b.id !== id); setBlocks(updated); persistResume(header, updated, theme); }); };
+  const saveBlockForm = (e) => { e.preventDefault(); let updated; if (blockForm.id) { updated = blocks.map(b => b.id === blockForm.id ? blockForm : b); } else { updated = [...blocks, { ...blockForm, id: `block_${Date.now()}`, active: true }]; } setBlocks(updated); persistResume(header, updated, theme); setBlockForm(null); };
+  const saveHeader = (e) => { e.preventDefault(); persistResume(header, blocks, theme); setIsHeaderModalOpen(false); };
+  const toggleTheme = () => { const newTheme = theme === 'modern' ? 'classic' : 'modern'; setTheme(newTheme); persistResume(header, blocks, newTheme); };
 
   const copyToATS = () => {
     const activeBlocks = blocks.filter(b => b.active);
     let text = `${header.name}\n${header.email} | ${header.location}\n${header.links}\n\n`;
-    
     ['Skills', 'Experience', 'Project', 'Education', 'Certification'].forEach(type => {
       const typeBlocks = activeBlocks.filter(b => b.type === type);
       if (typeBlocks.length === 0) return;
@@ -257,54 +230,13 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     const activeBlocks = blocks.filter(b => b.active);
     const fontFamily = theme === 'modern' ? 'ui-sans-serif, system-ui, sans-serif' : '"Georgia", serif';
     const headerColor = theme === 'modern' ? '#3730a3' : '#1a1a1a';
-
     const sections = ['Skills', 'Experience', 'Project', 'Education', 'Certification'].map(type => {
         const typeBlocks = activeBlocks.filter(b => b.type === type);
         if (!typeBlocks.length) return '';
-        return `
-          <section>
-            <h2>${type}</h2>
-            ${typeBlocks.map(block => `
-              <div class="block">
-                <div class="block-header">
-                  <span class="block-title">${block.title}</span>
-                  <span class="block-date">${block.date}</span>
-                </div>
-                ${block.bullets?.length ? `<ul>${block.bullets.map(b => `<li>${b}</li>`).join('')}</ul>` : ''}
-              </div>
-            `).join('')}
-          </section>`;
+        return `<section><h2>${type}</h2>${typeBlocks.map(block => `<div class="block"><div class="block-header"><span class="block-title">${block.title}</span><span class="block-date">${block.date}</span></div>${block.bullets?.length ? `<ul>${block.bullets.map(b => `<li>${b}</li>`).join('')}</ul>` : ''}</div>`).join('')}</section>`;
       }).join('');
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<title>${header.name} - Resume</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: ${fontFamily}; color: #1a1a1a; padding: 48px; font-size: 13px; line-height: 1.6; }
-  h1 { font-size: 28px; font-weight: 900; color: ${headerColor}; padding-bottom: 2px; margin-bottom: 4px; letter-spacing: -0.5px; }
-  .contact { font-size: 12px; color: #555; margin-bottom: 28px; border-bottom: 2px solid ${headerColor}; padding-bottom: 12px; }
-  section { margin-bottom: 22px; }
-  h2 { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: ${headerColor}; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 12px; }
-  .block { margin-bottom: 12px; }
-  .block-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
-  .block-title { font-weight: 700; font-size: 14px; }
-  .block-date { font-size: 11px; color: #666; font-style: italic; }
-  ul { padding-left: 18px; margin-top: 4px; }
-  li { margin-bottom: 3px; font-size: 12.5px; color: #333; }
-  @media print { body { padding: 32px; } }
-</style>
-</head>
-<body>
-  <h1>${header.name}</h1>
-  <p class="contact">${header.location} &bull; ${header.email} &bull; ${header.links}</p>
-  ${sections}
-  <script>window.onload = () => { window.print(); }</script>
-</body>
-</html>`;
-
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>${header.name} - Resume</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: ${fontFamily}; color: #1a1a1a; padding: 48px; font-size: 13px; line-height: 1.6; } h1 { font-size: 28px; font-weight: 900; color: ${headerColor}; padding-bottom: 2px; margin-bottom: 4px; letter-spacing: -0.5px; } .contact { font-size: 12px; color: #555; margin-bottom: 28px; border-bottom: 2px solid ${headerColor}; padding-bottom: 12px; } section { margin-bottom: 22px; } h2 { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: ${headerColor}; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 12px; } .block { margin-bottom: 12px; } .block-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; } .block-title { font-weight: 700; font-size: 14px; } .block-date { font-size: 11px; color: #666; font-style: italic; } ul { padding-left: 18px; margin-top: 4px; } li { margin-bottom: 3px; font-size: 12.5px; color: #333; } @media print { body { padding: 32px; } }</style></head><body><h1>${header.name}</h1><p class="contact">${header.location} &bull; ${header.email} &bull; ${header.links}</p>${sections}<script>window.onload = () => { window.print(); }</script></body></html>`;
     const blob = new Blob([html], { type: 'text/html' });
     const url  = URL.createObjectURL(blob);
     const win  = window.open(url, '_blank');
@@ -317,41 +249,26 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     setActiveStageIdx(Math.min(idx, STAGES.length - 1));
   };
 
-  const totalJobs = jobs.length;
-  const showEmptyState = !isLoadingJobs && totalJobs === 0 && activeView === 'kanban';
+  const showEmptyState = !isLoadingJobs && jobs.length === 0 && activeView === 'kanban';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-md mx-auto pb-12 h-full flex flex-col">
 
       {/* ── Top Header Row ─────────────────────────────────────────────────── */}
       <div className="flex gap-4 overflow-x-auto snap-x scrollbar-hide pb-2 shrink-0 w-full no-print">
-
-        {/* Card 1: Job Pipeline */}
         <div onClick={() => setActiveView('kanban')} className={`w-[85%] snap-center shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'kanban' ? 'bg-white border-indigo-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full"><Briefcase size={28} /></div>
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">Pipeline</h2>
-                
-                {/* --- CHRONO DROPDOWN IMPLEMENTED HERE --- */}
                 <div className="flex items-center gap-2 mt-1 text-slate-500 font-medium text-xs">
                   <Clock size={12} className="text-indigo-400" />
-                  <select 
-                    value={fetchDays} 
-                    onChange={(e) => setFetchDays(Number(e.target.value))} 
-                    onClick={(e) => e.stopPropagation()}
-                    className="bg-transparent font-bold text-indigo-600 outline-none cursor-pointer appearance-none"
-                  >
-                    <option value={3}>Past 3 Days</option>
-                    <option value={7}>Past 7 Days</option>
-                    <option value={14}>Past 14 Days</option>
-                    <option value={30}>Past 30 Days</option>
+                  <select value={fetchDays} onChange={(e) => setFetchDays(Number(e.target.value))} onClick={(e) => e.stopPropagation()} className="bg-transparent font-bold text-indigo-600 outline-none cursor-pointer appearance-none">
+                    <option value={3}>Past 3 Days</option><option value={7}>Past 7 Days</option><option value={14}>Past 14 Days</option><option value={30}>Past 30 Days</option>
                   </select>
-                  <span className="text-slate-300">|</span>
-                  <span>{ptTime} PT</span>
+                  <span className="text-slate-300">|</span><span>{ptTime} PT</span>
                 </div>
-                
               </div>
             </div>
           </div>
@@ -365,15 +282,11 @@ export default function JobCRM({ user, showToast, askConfirm }) {
           </div>
         </div>
 
-        {/* Card 2: Resume Engine */}
         <div onClick={() => setActiveView('remixer')} className={`w-[85%] snap-center shrink-0 border p-6 rounded-[28px] shadow-sm flex flex-col justify-between transition-colors cursor-pointer ${activeView === 'remixer' ? 'bg-white border-emerald-200' : 'bg-slate-50/50 border-slate-200 opacity-60 grayscale'}`}>
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full"><FileText size={28} /></div>
-              <div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">Engine</h2>
-                <div className="text-slate-500 font-medium text-xs mt-0.5">Tailor & Export CV</div>
-              </div>
+              <div><h2 className="text-xl font-black text-slate-900 tracking-tight">Engine</h2><div className="text-slate-500 font-medium text-xs mt-0.5">Tailor & Export CV</div></div>
             </div>
           </div>
           <button onClick={(e) => { e.stopPropagation(); handleExportPDF(); }} className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition-colors active:scale-95 shadow-sm flex justify-center items-center gap-2">
@@ -413,12 +326,14 @@ export default function JobCRM({ user, showToast, askConfirm }) {
                     {!isLoadingJobs && stageJobs.map(job => {
                       const cardContent = (
                         <>
-                          <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-slate-900 flex items-center gap-2">{job.company}</h3><button onClick={() => openEdit(job)} className="text-slate-300 hover:text-indigo-600 p-1"><Pencil size={14} /></button></div>
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-slate-900 flex items-center gap-2">{job.company}</h3>
+                            <button onClick={(e) => { e.stopPropagation(); openEdit(job); }} className="text-slate-300 hover:text-indigo-600 p-1"><Pencil size={14} /></button>
+                          </div>
                           <div className="text-sm font-medium text-slate-600 flex items-center gap-1.5 mb-3"><Globe size={14} className="text-slate-400" /> {job.role || "Role not specified"}</div>
                           
                           <div className="flex flex-wrap gap-2 mb-3">
                             {job.salary && <div className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded-lg">{job.salary}</div>}
-                            {/* --- NEW V10 METADATA BADGE --- */}
                             {job.notes && job.notes.startsWith("Src:") && (
                               <div className="text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-100 inline-block px-2 py-1 rounded-lg truncate max-w-full">
                                 {job.notes.split('|')[1]?.trim() || "Details inside"}
@@ -428,20 +343,28 @@ export default function JobCRM({ user, showToast, askConfirm }) {
 
                           {isInbox ? (
                             <div className="flex w-full gap-2 mt-3 pt-3 border-t border-slate-50">
-                              <button onClick={() => fastDiscardLead(job.id)} className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><X size={16} /> Discard</button>
-                              <button onClick={() => moveJob(job.id, job.stage)} className="flex-1 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><Check size={16} /> Keep</button>
+                              <button onClick={(e) => { e.stopPropagation(); fastDiscardLead(job.id); }} className="flex-1 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><X size={16} /> Discard</button>
+                              <button onClick={(e) => { e.stopPropagation(); moveJob(job.id, job.stage); }} className="flex-1 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 transition-colors"><Check size={16} /> Keep</button>
                             </div>
                           ) : (
                             <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                              <div className="flex gap-2">{job.url && <a href={job.url} target="_blank" rel="noreferrer" className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"><ExternalLink size={14} /></a>}<button onClick={() => deleteJob(job.id)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={14} /></button></div>
-                              {STAGES.findIndex(s => s.id === job.stage) < STAGES.length - 1 ? <button onClick={() => moveJob(job.id, job.stage)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">Advance <ArrowRight size={14} /></button> : <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold px-3 py-1.5 bg-emerald-50 rounded-xl"><CheckCircle size={14} /> Complete</div>}
+                              <div className="flex gap-2">
+                                {job.url && <a href={job.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"><ExternalLink size={14} /></a>}
+                                <button onClick={(e) => { e.stopPropagation(); deleteJob(job.id); }} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={14} /></button>
+                              </div>
+                              {STAGES.findIndex(s => s.id === job.stage) < STAGES.length - 1 ? (
+                                <button onClick={(e) => { e.stopPropagation(); moveJob(job.id, job.stage); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl active:scale-95 transition-all">Advance <ArrowRight size={14} /></button>
+                              ) : (
+                                <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold px-3 py-1.5 bg-emerald-50 rounded-xl"><CheckCircle size={14} /> Complete</div>
+                              )}
                             </div>
                           )}
                         </>
                       );
 
-                      if (isInbox) return <motion.div key={job.id} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.8} onDragEnd={(e, info) => { if (info.offset.x < -100) fastDiscardLead(job.id); else if (info.offset.x > 100) moveJob(job.id, job.stage); }} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 transition-colors group relative cursor-grab active:cursor-grabbing touch-pan-y">{cardContent}</motion.div>;
-                      return <div key={job.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-100 transition-colors group relative">{cardContent}</div>;
+                      // Clicking the card opens the new Job Details Modal
+                      if (isInbox) return <motion.div key={job.id} onClick={() => setViewingJob(job)} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.8} onDragEnd={(e, info) => { if (info.offset.x < -100) fastDiscardLead(job.id); else if (info.offset.x > 100) moveJob(job.id, job.stage); }} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 transition-colors group relative cursor-pointer active:cursor-grabbing touch-pan-y">{cardContent}</motion.div>;
+                      return <div key={job.id} onClick={() => setViewingJob(job)} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-100 transition-colors group relative cursor-pointer">{cardContent}</div>;
                     })}
                   </div>
                 </div>
@@ -454,8 +377,6 @@ export default function JobCRM({ user, showToast, askConfirm }) {
       {/* ── RESUME ENGINE VIEW ──────────────────────────────────────────────── */}
       {activeView === 'remixer' && (
         <div className="flex-1 overflow-y-auto space-y-4 no-print scrollbar-hide pb-12 animate-in fade-in slide-in-from-bottom-4">
-          
-          {/* Quick Actions Bar */}
           <div className="grid grid-cols-4 gap-2 bg-white p-2 rounded-[24px] shadow-sm border border-slate-100">
             <button onClick={() => setIsHeaderModalOpen(true)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl hover:bg-slate-50 text-slate-600"><UserCircle size={20}/><span className="text-[10px] font-bold">Header</span></button>
             <button onClick={() => setBlockForm({ type: 'Experience', title: '', date: '', bullets: [''] })} className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl hover:bg-slate-50 text-emerald-600"><PlusCircle size={20}/><span className="text-[10px] font-bold">Add</span></button>
@@ -469,10 +390,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
             <Reorder.Group axis="y" values={blocks} onReorder={handleReorderBlocks} className="space-y-3">
               {blocks.map(block => (
                 <Reorder.Item key={block.id} value={block} className={`bg-white p-4 rounded-[24px] border shadow-sm flex items-start gap-3 transition-colors ${block.active ? 'border-emerald-200' : 'border-slate-200 opacity-60 grayscale'}`}>
-                  
-                  {/* Drag Handle */}
                   <div className="pt-1 text-slate-300 cursor-grab active:cursor-grabbing hover:text-slate-500 touch-none"><GripVertical size={20} /></div>
-                  
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
                       <div>
@@ -480,12 +398,8 @@ export default function JobCRM({ user, showToast, askConfirm }) {
                         <div className={`font-bold ${block.active ? 'text-slate-900' : 'text-slate-500'}`}>{block.title}</div>
                         {block.date && <div className="text-xs text-slate-400 font-medium mt-0.5">{block.date}</div>}
                       </div>
-                      
-                      {/* Action Buttons */}
                       <div className="flex items-center gap-1 bg-slate-50 rounded-full p-1 border border-slate-100">
-                        <button onClick={() => toggleBlockVisibility(block.id)} className={`p-1.5 rounded-full ${block.active ? 'text-emerald-600 hover:bg-emerald-100' : 'text-slate-400 hover:bg-slate-200'}`}>
-                          {block.active ? <Eye size={16} /> : <EyeOff size={16} />}
-                        </button>
+                        <button onClick={() => toggleBlockVisibility(block.id)} className={`p-1.5 rounded-full ${block.active ? 'text-emerald-600 hover:bg-emerald-100' : 'text-slate-400 hover:bg-slate-200'}`}>{block.active ? <Eye size={16} /> : <EyeOff size={16} />}</button>
                         <button onClick={() => setBlockForm(block)} className="p-1.5 rounded-full text-slate-400 hover:bg-slate-200 hover:text-indigo-600"><Edit3 size={16} /></button>
                         <button onClick={() => deleteBlock(block.id)} className="p-1.5 rounded-full text-slate-400 hover:bg-red-100 hover:text-red-600"><Trash2 size={16} /></button>
                       </div>
@@ -499,18 +413,63 @@ export default function JobCRM({ user, showToast, askConfirm }) {
       )}
 
       {/* ── MODALS ──────────────────────────────────────────────────────────── */}
+      
+      {/* 1. Job Details View Modal (NEW) */}
+      <Modal isOpen={!!viewingJob} onClose={() => setViewingJob(null)} title="Job Details">
+        {viewingJob && (
+          <div className="space-y-6 px-1">
+            <div className="border-b border-slate-100 pb-5">
+              <h2 className="text-2xl font-black text-slate-900 leading-tight">{viewingJob.company}</h2>
+              <p className="text-lg font-medium text-indigo-600 mt-1 flex items-center gap-2"><Briefcase size={18}/> {viewingJob.role}</p>
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              <div className="px-3 py-1.5 bg-slate-50 text-slate-600 font-bold text-sm rounded-xl border border-slate-200 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-slate-400"></span> {STAGES.find(s => s.id === viewingJob.stage)?.label || "Saved"}
+              </div>
+              {viewingJob.salary && (
+                <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 font-bold text-sm rounded-xl border border-emerald-100">
+                  {viewingJob.salary}
+                </div>
+              )}
+            </div>
+
+            {viewingJob.notes && (
+              <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4">
+                <div className="flex items-center gap-2 text-amber-800 font-bold text-xs uppercase tracking-wider mb-2">
+                  <AlignLeft size={14} /> Notes & Details
+                </div>
+                <p className="text-slate-700 text-sm whitespace-pre-wrap leading-relaxed">{viewingJob.notes}</p>
+              </div>
+            )}
+
+            <div className="pt-4 flex gap-3">
+              {viewingJob.url && (
+                <a href={viewingJob.url} target="_blank" rel="noreferrer" className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
+                  Open Job Post <ExternalLink size={16}/>
+                </a>
+              )}
+              <button onClick={() => { setViewingJob(null); openEdit(viewingJob); }} className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
+                Edit
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 2. Add / Edit Job Modal */}
       <Modal isOpen={isModalOpen} onClose={closeModal} title={editingId ? "Edit Job" : "Add Job"}>
         <form onSubmit={handleSaveJob} className="space-y-4">
           <div><label className="text-sm font-bold text-slate-600 ml-1">Company</label><input type="text" placeholder="e.g. Coursera" value={form.company} onChange={(e) => setForm({...form, company: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20" /></div>
           <div><label className="text-sm font-bold text-slate-600 ml-1">Role</label><input type="text" placeholder="e.g. Instructional Designer" value={form.role} onChange={(e) => setForm({...form, role: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20" /></div>
           <div className="grid grid-cols-2 gap-3"><div><label className="text-sm font-bold text-slate-600 ml-1">Salary Range</label><input type="text" placeholder="e.g. $70k - $90k" value={form.salary} onChange={(e) => setForm({...form, salary: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20" /></div><div><label className="text-sm font-bold text-slate-600 ml-1">Stage</label><select value={form.stage} onChange={(e) => setForm({...form, stage: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20">{STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div></div>
           <div><label className="text-sm font-bold text-slate-600 ml-1">Job Post URL</label><input type="url" placeholder="https://..." value={form.url} onChange={(e) => setForm({...form, url: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-indigo-600 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20" /></div>
-          <div><label className="text-sm font-bold text-slate-600 ml-1">Notes</label><textarea rows="2" placeholder="Remote requirements, contacts, etc." value={form.notes} onChange={(e) => setForm({...form, notes: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 resize-none" /></div>
+          <div><label className="text-sm font-bold text-slate-600 ml-1">Notes</label><textarea rows="4" placeholder="Paste the job description, contacts, etc." value={form.notes} onChange={(e) => setForm({...form, notes: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 resize-none" /></div>
           <Button type="submit" className="w-full !mt-6 !bg-indigo-600" disabled={!form.company.trim()}>{editingId ? "Update Job" : "Save Job"}</Button>
         </form>
       </Modal>
 
-      {/* Resume Header Modal */}
+      {/* 3. Resume Header Modal */}
       <Modal isOpen={isHeaderModalOpen} onClose={() => setIsHeaderModalOpen(false)} title="Edit Header">
         <form onSubmit={saveHeader} className="space-y-4">
           <div><label className="text-sm font-bold text-slate-600 ml-1">Full Name</label><input type="text" value={header.name} onChange={(e) => setHeader({...header, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none" /></div>
@@ -523,7 +482,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
         </form>
       </Modal>
 
-      {/* Block Editor Modal */}
+      {/* 4. Block Editor Modal */}
       {blockForm && (
         <Modal isOpen={!!blockForm} onClose={() => setBlockForm(null)} title={blockForm.id ? "Edit Block" : "New Block"}>
           <form onSubmit={saveBlockForm} className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
@@ -544,11 +503,10 @@ export default function JobCRM({ user, showToast, askConfirm }) {
               <input type="text" placeholder="e.g. Instructional Designer | Acme Corp" value={blockForm.title} onChange={(e) => setBlockForm({...blockForm, title: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-bold outline-none" required />
             </div>
             
-            {/* Dynamic Bullets */}
             <div>
               <div className="flex justify-between items-center mb-2 ml-1">
                 <label className="text-sm font-bold text-slate-600">Bullet Points</label>
-                <button type="button" onClick={() => setBlockForm({...blockForm, bullets: [...(blockForm.bullets||[]), '']})} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-lg">+ Add Bullet</button>
+                <button type="button" onClick={() => setBlockForm({...blockForm, bullets: [...(blockForm.bullets||[]), '']})} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-lg">+ Add</button>
               </div>
               <div className="space-y-2">
                 {(blockForm.bullets || []).map((bullet, i) => (
