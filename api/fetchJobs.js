@@ -1,25 +1,31 @@
 // api/fetchJobs.js
 export default async function handler(req, res) {
   try {
-    const headers = { 'User-Agent': 'LifeOS-V8-Infinity/8.0' };
+    const headers = { 'User-Agent': 'LifeOS-LordTier-V9/9.0' };
 
     // =========================================================
     // 1. DIRECT ATS CONFIGURATIONS
     // =========================================================
     const greenhouseBoards = [
+      // The Giants
       'coursera', 'duolingo', 'masterclass', 'guildeducation', 'udemy',
       'quizlet', 'articulate', 'instructure', 'chegg', 'amplify',
       'ixllearning', 'teachable', 'thinkific', 'goguardian', 'betterup',
+      // The Up-and-Comers
       'synthesis', 'degreed', 'coachhub', 'remind', 'mainstay',
       'preply', 'lingoda', 'elsa', 'busuu', 'hone', 'section', 'rivo',
       'cornerstone', 'learnupon', '360learning', 'absorblms', 'docebo',
-      'skillshare', 'brainpop', 'newsela', 'datacamp', 'ageoflearning', 'pluralsight'
+      'skillshare', 'brainpop', 'newsela', 'datacamp', 'ageoflearning', 'pluralsight',
+      // NEW V9: Global Language & E-Learning platforms
+      'babbel', 'memrise', 'outlier'
     ];
 
     const leverBoards = [
       'outschool', 'khanacademy', 'edpuzzle', 'seesaw', 'varsitytutors',
       'paper', 'swingeducation', 'loora', 'kyronlearning', 'labster', 'springboard',
-      'litmos', 'lessonly', 'highspot', 'workramp'
+      'litmos', 'lessonly', 'highspot', 'workramp',
+      // NEW V9: Language platforms
+      'cambly'
     ];
 
     const workdayBoards = [
@@ -31,8 +37,6 @@ export default async function handler(req, res) {
 
     const ashbyBoards = ['maven', 'reforge', 'sanalabs'];
     const breezyBoards = ['teachaway', 'classpoint'];
-
-    // NEW V8: BambooHR, Workable, SmartRecruiters, Recruitee
     const bambooBoards = ['dreambox', 'zearn', 'promethean', 'scholastic'];
     const workableBoards = ['magoosh', 'edmentum', 'gynzy', 'knewton'];
     const smartRecruitersBoards = ['canva', 'smartrecruiters'];
@@ -88,7 +92,6 @@ export default async function handler(req, res) {
       } catch (e) { return []; }
     });
 
-    // NEW V8: BambooHR Fetcher
     const bambooPromises = bambooBoards.map(async board => {
       try {
         const r = await fetch(`https://${board}.bamboohr.com/careers/list`, { headers });
@@ -97,7 +100,6 @@ export default async function handler(req, res) {
       } catch (e) { return []; }
     });
 
-    // NEW V8: SmartRecruiters Fetcher
     const smartRecruitersPromises = smartRecruitersBoards.map(async board => {
       try {
         const r = await fetch(`https://api.smartrecruiters.com/v1/companies/${board}/postings`, { headers });
@@ -106,7 +108,6 @@ export default async function handler(req, res) {
       } catch (e) { return []; }
     });
 
-    // NEW V8: Workable Fetcher
     const workablePromises = workableBoards.map(async board => {
       try {
         const r = await fetch(`https://www.workable.com/api/accounts/${board}?details=false`, { headers });
@@ -115,7 +116,6 @@ export default async function handler(req, res) {
       } catch (e) { return []; }
     });
 
-    // NEW V8: Recruitee Fetcher
     const recruiteePromises = recruiteeBoards.map(async board => {
       try {
         const r = await fetch(`https://${board}.recruitee.com/api/offers`, { headers });
@@ -135,9 +135,13 @@ export default async function handler(req, res) {
       (async () => { try { const r = await fetch('https://weworkremotely.com/categories/remote-education-jobs.json', { headers }); const d = await r.json(); return (d.jobs || []).map(j => ({ company: j.company, title: j.subject, url: j.url, salary: "Not listed", location: j.region || "Remote", source: "WWR" })); } catch (e) { return []; } })(),
       (async () => { try { const r = await fetch('https://findwork.dev/api/jobs/?search=instructional', { headers }); const d = await r.json(); return (d.results || []).map(j => ({ company: j.company_name, title: j.role, url: j.url, salary: "Not listed", location: j.location || "Remote", source: "FindWork" })); } catch (e) { return []; } })(),
       (async () => { try { const r = await fetch('https://jobspresso.co/wp-json/wp/v2/job_listing?search=instructional', { headers }); const d = await r.json(); return Array.isArray(d) ? d.map(j => ({ company: "Jobspresso Listing", title: j.title?.rendered, url: j.link, salary: "Not listed", location: "Remote", source: "Jobspresso" })) : []; } catch (e) { return []; } })(),
-      
-      // NEW V8: Working Nomads JSON API
-      (async () => { try { const r = await fetch('https://www.workingnomads.com/api/exposed_jobs/', { headers }); const d = await r.json(); return Array.isArray(d) ? d.map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: "Not listed", location: j.location_requirements || "Remote", source: "Working Nomads" })) : []; } catch (e) { return []; } })()
+      (async () => { try { const r = await fetch('https://www.workingnomads.com/api/exposed_jobs/', { headers }); const d = await r.json(); return Array.isArray(d) ? d.map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: "Not listed", location: j.location_requirements || "Remote", source: "Working Nomads" })) : []; } catch (e) { return []; } })(),
+
+      // NEW V9 SOURCE 1: Arbeitnow (Mass Aggregator for under-the-radar startups)
+      (async () => { try { const r = await fetch('https://www.arbeitnow.com/api/job-board-api', { headers }); const d = await r.json(); return (d.data || []).map(j => ({ company: j.company_name, title: j.title, url: j.url, salary: "Not listed", location: j.location || "Remote", source: "Arbeitnow" })); } catch (e) { return []; } })(),
+
+      // NEW V9 SOURCE 2: The Muse (Brought back & specifically targeting Education + Software Engineering overlaps)
+      (async () => { try { const r = await fetch('https://www.themuse.com/api/public/jobs?category=Education&category=Software%20Engineer&location=Flexible%20%2F%20Remote&page=1', { headers }); const d = await r.json(); return (d.results || []).map(j => ({ company: j.company.name, title: j.name, url: j.refs.landing_page, salary: "Not listed", location: j.locations?.map(l=>l.name).join(', ') || "Remote", source: "The Muse" })); } catch (e) { return []; } })()
     ];
 
     // =========================================================
@@ -157,20 +161,24 @@ export default async function handler(req, res) {
       .flatMap(r => r.value);
 
     // =========================================================
-    // 5. THE BOUNCER
+    // 5. THE DUAL-TRACK VIP BOUNCER
     // =========================================================
     const vipList = [
+      // Track 1: LXD, ID, and Education Roles
       'instructional', 'curriculum', 'esl', 'edtech', 'e-learning', 'elearning',
       'lxd', 'learning experience', 'educational', 'l&d', 'learning', 'education',
       'trainer', 'training', 'subject matter expert', 'sme', 'course', 'bilingual',
-      'teacher', 'educator'
+      'teacher', 'educator', 'lms', 'technologist', 'localization', 'linguist',
+      
+      // Track 2: The Web Dev & Hybrid Edge (React / Frontend / Technical)
+      'frontend', 'front-end', 'react', 'web developer', 'learning engineer', 'javascript'
     ];
 
+    // The scalpel: Removed "developer" and "engineer" so we don't block your React skills.
     const bannedList = [
-      'machine learning', 'deep learning', 'sales', 'marketing', 'engineer',
-      'software', 'developer', 'account executive', 'customer success', 'data scientist',
-      'backend', 'frontend', 'ai', 'manager', 'director', 'vp', 'head', 'principal',
-      'counsel', 'finance'
+      'machine learning', 'deep learning', 'sales', 'marketing', 'data scientist',
+      'backend', 'data engineer', 'account executive', 'customer success', 
+      'manager', 'director', 'vp', 'head', 'principal', 'counsel', 'finance', 'payroll'
     ];
 
     const bannedLocations = [
@@ -207,7 +215,7 @@ export default async function handler(req, res) {
     res.status(200).json({ jobs: finalJobs });
 
   } catch (error) {
-    console.error("LifeOS V8 API Error:", error);
+    console.error("LifeOS V9 API Error:", error);
     res.status(500).json({ error: "Failed to fetch job leads." });
   }
 }
