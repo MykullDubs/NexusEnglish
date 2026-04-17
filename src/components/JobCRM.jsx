@@ -82,6 +82,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
   const [isModalOpen, setIsModalOpen]     = useState(false);
   const [ptTime, setPtTime]               = useState("");
   const [isFetching, setIsFetching]       = useState(false);
+  const [fetchDays, setFetchDays]         = useState(7); // <--- CHRONO STATE ADDED
   const [editingId, setEditingId]         = useState(null);
   const [form, setForm]                   = useState({ company: "", role: "", url: "", stage: "saved", notes: "", salary: "" });
 
@@ -145,7 +146,8 @@ export default function JobCRM({ user, showToast, askConfirm }) {
     if (!user) return;
     setIsFetching(true);
     try {
-      const res  = await fetch('/api/fetchJobs');
+      // <--- ADDED DAYS PARAMETER HERE
+      const res  = await fetch(`/api/fetchJobs?days=${fetchDays}`);
       const data = await res.json();
       if (data.error) { showToast(data.error, "error"); setIsFetching(false); return; }
 
@@ -254,7 +256,7 @@ export default function JobCRM({ user, showToast, askConfirm }) {
   const handleExportPDF = () => {
     const activeBlocks = blocks.filter(b => b.active);
     const fontFamily = theme === 'modern' ? 'ui-sans-serif, system-ui, sans-serif' : '"Georgia", serif';
-    const headerColor = theme === 'modern' ? '#3730a3' : '#1a1a1a'; // Indigo vs Black
+    const headerColor = theme === 'modern' ? '#3730a3' : '#1a1a1a';
 
     const sections = ['Skills', 'Experience', 'Project', 'Education', 'Certification'].map(type => {
         const typeBlocks = activeBlocks.filter(b => b.type === type);
@@ -331,7 +333,25 @@ export default function JobCRM({ user, showToast, askConfirm }) {
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full"><Briefcase size={28} /></div>
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">Pipeline</h2>
-                <div className="flex items-center gap-1.5 text-slate-500 font-medium text-xs mt-0.5"><Clock size={12} className="text-indigo-400" /><span className="font-bold text-indigo-600">{ptTime}</span> PT</div>
+                
+                {/* --- CHRONO DROPDOWN IMPLEMENTED HERE --- */}
+                <div className="flex items-center gap-2 mt-1 text-slate-500 font-medium text-xs">
+                  <Clock size={12} className="text-indigo-400" />
+                  <select 
+                    value={fetchDays} 
+                    onChange={(e) => setFetchDays(Number(e.target.value))} 
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-transparent font-bold text-indigo-600 outline-none cursor-pointer appearance-none"
+                  >
+                    <option value={3}>Past 3 Days</option>
+                    <option value={7}>Past 7 Days</option>
+                    <option value={14}>Past 14 Days</option>
+                    <option value={30}>Past 30 Days</option>
+                  </select>
+                  <span className="text-slate-300">|</span>
+                  <span>{ptTime} PT</span>
+                </div>
+                
               </div>
             </div>
           </div>
@@ -395,7 +415,16 @@ export default function JobCRM({ user, showToast, askConfirm }) {
                         <>
                           <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-slate-900 flex items-center gap-2">{job.company}</h3><button onClick={() => openEdit(job)} className="text-slate-300 hover:text-indigo-600 p-1"><Pencil size={14} /></button></div>
                           <div className="text-sm font-medium text-slate-600 flex items-center gap-1.5 mb-3"><Globe size={14} className="text-slate-400" /> {job.role || "Role not specified"}</div>
-                          {job.salary && <div className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded-lg mb-3">{job.salary}</div>}
+                          
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {job.salary && <div className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded-lg">{job.salary}</div>}
+                            {/* --- NEW V10 METADATA BADGE --- */}
+                            {job.notes && job.notes.startsWith("Src:") && (
+                              <div className="text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-100 inline-block px-2 py-1 rounded-lg truncate max-w-full">
+                                {job.notes.split('|')[1]?.trim() || "Details inside"}
+                              </div>
+                            )}
+                          </div>
 
                           {isInbox ? (
                             <div className="flex w-full gap-2 mt-3 pt-3 border-t border-slate-50">
